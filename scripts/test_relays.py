@@ -10,7 +10,7 @@ import sys
 # GPIO pins for relays (BCM numbering)
 RELAY_PINS = {
     1: 17,   # IN1
-    2: 12,   # IN2
+    2: 18,   # IN2
     3: 27,   # IN3
     4: 22,   # IN4
     5: 23,   # IN5
