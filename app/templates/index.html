@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Classroom Control Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🏫 Smart Classroom Control</h1>
+                <div class="header-actions">
+                    <span class="username">{{ session.username }}</span>
+                    <a href="{{ url_for('logout') }}" class="btn btn-secondary">Logout</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Control Panel -->
+        <main class="main-content">
+            <!-- Master Controls -->
+            <section class="master-controls">
+                <h2>Master Controls</h2>
+                <div class="button-group">
+                    <button id="allOnBtn" class="btn btn-success">
+                        <span class="icon">💡</span> All Lights ON
+                    </button>
+                    <button id="allOffBtn" class="btn btn-danger">
+                        <span class="icon">🌙</span> All Lights OFF
+                    </button>
+                    <button id="refreshBtn" class="btn btn-info">
+                        <span class="icon">🔄</span> Refresh Status
+                    </button>
+                </div>
+            </section>
+
+            <!-- Individual Relay Controls -->
+            <section class="relay-controls">
+                <h2>Individual Controls</h2>
+                <div id="relayGrid" class="relay-grid">
+                    <!-- Relay cards will be dynamically generated -->
+                </div>
+            </section>
+
+            <!-- Status Bar -->
+            <div id="statusBar" class="status-bar"></div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Raspberry Pi 5 IoT Classroom Automation | Last Updated: <span id="lastUpdate">--</span></p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
