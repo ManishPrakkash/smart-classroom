@@ -10,13 +10,13 @@ import sys
 # GPIO pins for relays (BCM numbering)
 RELAY_PINS = {
     1: 17,   # IN1
-    2: 27,   # IN2
-    3: 22,   # IN3
-    4: 23,   # IN4
-    5: 24,   # IN5
-    6: 25,   # IN6
-    7: 5,    # IN7
-    8: 6,    # IN8
+    2: 18,   # IN2
+    3: 27,   # IN3
+    4: 22,   # IN4
+    5: 23,   # IN5
+    6: 24,   # IN6
+    7: 25,   # IN7
+    8: 5,    # IN8
 }
 
 def test_relays():

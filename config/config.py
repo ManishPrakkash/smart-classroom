@@ -31,13 +31,13 @@ class Config:
     # These pins connect to IN1-IN8 on the relay board
     RELAY_PINS = {
         1: 17,   # IN1 → GPIO17 (Pin 11)
-        2: 27,   # IN2 → GPIO27 (Pin 13)
-        3: 22,   # IN3 → GPIO22 (Pin 15)
-        4: 23,   # IN4 → GPIO23 (Pin 16)
-        5: 24,   # IN5 → GPIO24 (Pin 18)
-        6: 25,   # IN6 → GPIO25 (Pin 22)
-        7: 5,    # IN7 → GPIO5  (Pin 29)
-        8: 6,    # IN8 → GPIO6  (Pin 31)
+        2: 18,   # IN2 → GPIO18 (Pin 12) 
+        3: 27,   # IN3 → GPIO27 (Pin 13)
+        4: 22,   # IN4 → GPIO22 (Pin 15)
+        5: 23,   # IN5 → GPIO23 (Pin 16)
+        6: 24,   # IN6 → GPIO24 (Pin 18)
+        7: 25,   # IN7 → GPIO25 (Pin 22)
+        8: 5,    # IN8 → GPIO5  (Pin 29)
     }
     
     # Relay names for each channel (customizable)

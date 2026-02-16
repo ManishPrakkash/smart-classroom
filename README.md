@@ -19,13 +19,13 @@ Login: admin / classroom123
 | Relay | GPIO (BCM) | Physical Pin |
 |-------|-----------|-------------|
 | IN1   | GPIO 17   | Pin 11      |
-| IN2   | GPIO 27   | Pin 13      |
-| IN3   | GPIO 22   | Pin 15      |
-| IN4   | GPIO 23   | Pin 16      |
-| IN5   | GPIO 24   | Pin 18      |
-| IN6   | GPIO 25   | Pin 22      |
-| IN7   | GPIO 5    | Pin 29      |
-| IN8   | GPIO 6    | Pin 31      |
+| IN2   | GPIO 18   | Pin 12      |
+| IN3   | GPIO 27   | Pin 13      |
+| IN4   | GPIO 22   | Pin 15      |
+| IN5   | GPIO 23   | Pin 16      |
+| IN6   | GPIO 24   | Pin 18      |
+| IN7   | GPIO 25   | Pin 22      |
+| IN8   | GPIO 5    | Pin 29      |
 | VCC   | 5V        | Pin 2       |
 | GND   | GND       | Pin 6       |
 
