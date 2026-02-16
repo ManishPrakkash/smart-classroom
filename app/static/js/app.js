@@ -76,7 +76,7 @@ class SmartClassroom {
             this.relays = result.relays;
             this.renderRelays();
             this.updateLastUpdate();
-            this.showStatus('Status updated', 'success');
+            // Only show status when manually clicking refresh button
         }
 
         btnRefresh.innerHTML = originalText;
@@ -121,7 +121,7 @@ class SmartClassroom {
         const result = await this.apiCall(`/relay/${channel}/toggle`, 'POST');
 
         if (result && result.success) {
-            this.showStatus(`${result.name} turned ${result.state_text}`, 'success');
+            // Silently refresh status without showing popup
             await this.refreshStatus();
         }
     }
@@ -130,7 +130,7 @@ class SmartClassroom {
         const result = await this.apiCall(`/relay/${channel}`, 'POST', { state });
 
         if (result && result.success) {
-            this.showStatus(`${result.name} turned ${result.state_text}`, 'success');
+            // Silently refresh status without showing popup
             await this.refreshStatus();
         }
     }
@@ -140,7 +140,7 @@ class SmartClassroom {
         const result = await this.apiCall(endpoint, 'POST');
 
         if (result && result.success) {
-            this.showStatus(result.message, 'success');
+            // Silently refresh status without showing popup
             await this.refreshStatus();
         }
     }
