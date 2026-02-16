@@ -42,14 +42,14 @@ class Config:
     
     # Relay names for each channel (customizable)
     RELAY_NAMES = {
-        1: "Light Section 1",
-        2: "Light Section 2",
-        3: "Light Section 3",
-        4: "Light Section 4",
-        5: "Projector",
-        6: "Fan 1",
-        7: "Fan 2",
-        8: "Extra Outlet"
+        1: "Channel 1",
+        2: "Channel 2",
+        3: "Channel 3",
+        4: "Channel 4",
+        5: "Channel 5",
+        6: "Channel 6",
+        7: "Channel 7",
+        8: "Channel 8"
     }
     
     # Relay trigger type (0 = ON for active-low relays)

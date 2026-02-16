@@ -99,8 +99,8 @@ class SmartClassroom {
 
         card.innerHTML = `
             <div class="relay-header">
+                <span class="relay-channel">CH${relay.channel}</span>
                 <span class="relay-name">${relay.name}</span>
-                <span class="relay-channel">CH ${relay.channel}</span>
             </div>
             <div class="relay-status">
                 <span class="status-indicator ${relay.state ? 'on' : ''}"></span>

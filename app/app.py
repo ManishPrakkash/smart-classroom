@@ -16,8 +16,17 @@ sys.path.insert(0, str(project_root))
 # Import configuration
 from config.config import config
 
-# Import hardware controller
-from hardware.relay_controller import RelayController
+# Auto-detect hardware availability
+MOCK_MODE = False
+try:
+    import lgpio
+    # lgpio available, use real hardware controller
+    from hardware.relay_controller import RelayController
+    MOCK_MODE = False
+except ImportError:
+    # lgpio not available, use mock controller for testing
+    from hardware.mock_relay_controller import MockRelayController as RelayController
+    MOCK_MODE = True
 
 # Import API
 from api.routes import api_bp, init_api
@@ -53,6 +62,15 @@ def init_hardware(app):
     
     logger = logging.getLogger(__name__)
     
+    # Show mode warning if in mock mode
+    if MOCK_MODE:
+        logger.warning("=" * 70)
+        logger.warning("RUNNING IN MOCK MODE (No GPIO Hardware)")
+        logger.warning("This is for testing the web interface on PC/Mac/Linux")
+        logger.warning("Relay states will be simulated - no actual hardware control")
+        logger.warning("To use real hardware, run on Raspberry Pi with lgpio installed")
+        logger.warning("=" * 70)
+    
     try:
         relay_controller = RelayController(
             gpio_chip=app.config['GPIO_CHIP'],
@@ -61,7 +79,8 @@ def init_hardware(app):
         )
         
         if relay_controller.initialize():
-            logger.info("Hardware initialized successfully")
+            mode = "MOCK MODE" if MOCK_MODE else "HARDWARE MODE"
+            logger.info(f"Hardware initialized successfully ({mode})")
             # Initialize API with controller
             init_api(relay_controller)
             return True
