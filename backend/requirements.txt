@@ -3,6 +3,8 @@ flask-cors
 gpiozero
 pigpio
 apscheduler
+ntplib        # NTP time sync — keeps schedules accurate without an RTC chip
+pytz          # Timezone support
 
 # Alternative GPIO libraries (uncomment if needed):
 # lgpio

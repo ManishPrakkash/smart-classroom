@@ -1,8 +1,65 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { API_BASE } from './config'
 import './SchedulePage.css'
 
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+// ── Server Clock (NTP-corrected) ─────────────────────────
+// Fetches /time from the Pi once, then ticks locally every second.
+// Re-syncs with the server every 30 s to stay accurate.
+
+function ServerClock() {
+  const [display, setDisplay] = useState(null)   // { time, date, ntp_synced, timezone }
+  const [ticking, setTicking] = useState(null)   // current HH:MM:SS string
+  const secondsRef = useRef(0)                   // seconds elapsed since last server sync
+
+  const fetchTime = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/time`)
+      if (!res.ok) return
+      const data = await res.json()
+      setDisplay(data)
+      setTicking(data.time)   // e.g. "14:32:07"
+      secondsRef.current = 0
+    } catch { /* offline */ }
+  }
+
+  useEffect(() => {
+    fetchTime()
+    const syncInterval = setInterval(fetchTime, 30_000)   // re-sync every 30 s
+    return () => clearInterval(syncInterval)
+  }, [])
+
+  // Local tick every second between server syncs
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setTicking(prev => {
+        if (!prev) return prev
+        const [h, m, s] = prev.split(':').map(Number)
+        const total = h * 3600 + m * 60 + s + 1
+        const hh = String(Math.floor(total / 3600) % 24).padStart(2, '0')
+        const mm = String(Math.floor((total % 3600) / 60)).padStart(2, '0')
+        const ss = String(total % 60).padStart(2, '0')
+        return `${hh}:${mm}:${ss}`
+      })
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [])
+
+  if (!display) return null
+
+  return (
+    <div className="server-clock">
+      <span className="server-clock__time">{ticking}</span>
+      <span className="server-clock__meta">
+        {display.date} &nbsp;&bull;&nbsp; {display.timezone}
+        {display.ntp_synced
+          ? <span className="clock-dot clock-dot--synced" title="NTP synced"> &#10003; NTP</span>
+          : <span className="clock-dot clock-dot--unsynced" title="NTP not synced"> &#9888; No NTP</span>}
+      </span>
+    </div>
+  )
+}
 
 const EMPTY_FORM = {
   label: '',
@@ -204,6 +261,8 @@ export default function SchedulePage({ allDevices }) {
           </svg>
         </button>
       </header>
+
+      <ServerClock />
 
       <div className="sched-list">
         {loading ? (

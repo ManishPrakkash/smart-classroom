@@ -3,8 +3,11 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
-from threading import Lock
+from datetime import datetime, timezone
+from threading import Lock, Thread
+
+import ntplib
+import pytz
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, jsonify, request
@@ -28,6 +31,50 @@ logger = logging.getLogger("smart-switch")
 
 SCHEDULES_FILE = os.path.join(os.path.dirname(__file__), "schedules.json")
 schedules_lock = Lock()
+
+# ── NTP time sync ────────────────────────────────────────
+#
+# Raspberry Pi has no hardware RTC. Without internet on first boot the
+# system clock is wrong, which breaks all schedules.
+# We fetch the true time from NTP servers, compute the offset between
+# NTP and the local clock, and apply that offset in ntp_now().
+# This never requires root and works even without 'timedatectl'.
+
+TIMEZONE    = pytz.timezone(os.getenv("TZ", "Asia/Kolkata"))  # change via TZ env var
+_ntp_offset = 0.0          # seconds: ntp_utc - local_utc
+_ntp_lock   = Lock()
+NTP_SERVERS = ["pool.ntp.org", "time.google.com", "time.cloudflare.com"]
+
+def sync_ntp():
+    """Query NTP and update _ntp_offset. Safe to call from any thread."""
+    global _ntp_offset
+    c = ntplib.NTPClient()
+    for server in NTP_SERVERS:
+        try:
+            resp = c.request(server, version=3, timeout=3)
+            offset = resp.offset          # how many seconds NTP is ahead of us
+            with _ntp_lock:
+                _ntp_offset = offset
+            logger.info("[NTP] Synced with %s  offset=%.3fs  true_time=%s",
+                        server,
+                        offset,
+                        datetime.fromtimestamp(resp.tx_time, tz=timezone.utc)
+                            .astimezone(TIMEZONE)
+                            .strftime("%Y-%m-%d %H:%M:%S %Z"))
+            return True
+        except Exception as exc:
+            logger.warning("[NTP] %s unreachable: %s", server, exc)
+    logger.warning("[NTP] All servers failed — using system clock (offset unchanged)")
+    return False
+
+def ntp_now() -> datetime:
+    """Return the current local time corrected by the last NTP offset."""
+    with _ntp_lock:
+        offset = _ntp_offset
+    return datetime.fromtimestamp(time.time() + offset, tz=TIMEZONE)
+
+# Run initial NTP sync in a background thread so startup isn't blocked
+Thread(target=sync_ntp, daemon=True, name="ntp-init").start()
 
 # ── GPIO setup ───────────────────────────────────────────
 
@@ -108,8 +155,8 @@ def save_schedules(schedules):
 # ── Scheduler logic ──────────────────────────────────────
 
 def run_schedules():
-    """Called every minute by APScheduler. Fires on/off for matching schedules."""
-    now = datetime.now()
+    """Called every minute by APScheduler. Uses NTP-corrected time."""
+    now = ntp_now()
     current_time = now.strftime("%H:%M")
     current_day  = now.weekday()  # 0=Mon … 6=Sun
 
@@ -133,10 +180,11 @@ def run_schedules():
                 relay.off()
                 logger.info("[Scheduler] OFF %s (schedule: %s)", device, sched.get("label"))
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(run_schedules, "cron", minute="*")
+scheduler = BackgroundScheduler(timezone=TIMEZONE)
+scheduler.add_job(run_schedules, "cron", minute="*")          # every minute
+scheduler.add_job(sync_ntp,      "cron", hour="*", minute=0)  # re-sync every hour
 scheduler.start()
-logger.info("Scheduler started")
+logger.info("Scheduler started (timezone: %s)", TIMEZONE)
 
 # ── Routes ───────────────────────────────────────────────
 
@@ -156,6 +204,20 @@ def index():
 @app.route("/status")
 def status():
     return jsonify({"status": "Smart Switch Running"})
+
+@app.route("/time")
+def server_time():
+    """Return the NTP-corrected server time so the frontend can display it."""
+    now = ntp_now()
+    with _ntp_lock:
+        offset = _ntp_offset
+    return jsonify({
+        "time":     now.strftime("%H:%M:%S"),
+        "date":     now.strftime("%Y-%m-%d"),
+        "timezone": str(TIMEZONE),
+        "ntp_offset_s": round(offset, 3),
+        "ntp_synced":   abs(offset) < 600,   # consider synced if offset < 10 min
+    })
 
 @app.route("/devices")
 def list_devices():
