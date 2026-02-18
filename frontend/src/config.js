@@ -3,8 +3,9 @@ const isNative = () => typeof window !== 'undefined' && window.Capacitor !== und
 
 export const getApiBaseUrl = () => {
   if (isNative()) {
-    const piIp = import.meta.env.VITE_PI_IP || 'localhost'
-    return `http://${piIp}:8000`
+    const piIp   = import.meta.env.VITE_PI_IP   || 'localhost'
+    const apiPort = import.meta.env.VITE_API_PORT || 8000
+    return `http://${piIp}:${apiPort}`
   }
   return '/api'
 }

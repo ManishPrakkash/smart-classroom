@@ -11,7 +11,7 @@ export default defineConfig({
     host: '0.0.0.0',  // Allow network access for mobile testing
     proxy: {
       '/api': {
-        target: 'http://10.27.253.96:8000',  // Raspberry Pi backend
+        target: `http://${process.env.VITE_PI_IP || 'localhost'}:${process.env.VITE_API_PORT || 8000}`,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       }
