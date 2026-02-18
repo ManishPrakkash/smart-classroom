@@ -9,7 +9,8 @@ env/
 ENV/
 *.egg-info/
 .pytest_cache/
-frontend\.env
+
+
 # Node
 node_modules/
 npm-debug.log*
@@ -44,3 +45,6 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+
+frontend\.env
