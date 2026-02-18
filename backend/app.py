@@ -9,11 +9,11 @@ from threading import Lock
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from gpiozero import Device, OutputDevice
+from gpiozero import Button, Device, OutputDevice
 from gpiozero.pins.mock import MockFactory
 from gpiozero.exc import BadPinFactory
 
-from devices import devices
+from devices import devices, switch_pins
 
 # ── App setup ────────────────────────────────────────────
 
@@ -51,6 +51,44 @@ def create_relays():
 
 setup_pin_factory()
 relays = create_relays()
+
+# ── Physical switch (push-button) setup ─────────────────
+#
+# Each push button is wired between its GPIO input pin and GND.
+# The internal pull-up resistor keeps the pin HIGH when idle.
+# Pressing the button pulls it LOW → gpiozero fires when_pressed.
+# The callback simply toggles whichever relay the button controls.
+# Because /states always reads live relay state, the next frontend
+# poll (every 1 s) will automatically reflect the physical change.
+
+def _make_toggle(relay, name):
+    """Return a thread-safe closure that toggles one relay."""
+    def _toggle():
+        if relay.is_active:
+            relay.off()
+            logger.info("[Physical Switch] OFF  %s", name)
+        else:
+            relay.on()
+            logger.info("[Physical Switch] ON   %s", name)
+    return _toggle
+
+def create_buttons():
+    buttons = {}
+    for name, pin in switch_pins.items():
+        relay = relays.get(name)
+        if relay is None:
+            logger.warning("No relay found for switch '%s' (pin %s)", name, pin)
+            continue
+        try:
+            btn = Button(pin, pull_up=True, bounce_time=0.05)
+            btn.when_pressed = _make_toggle(relay, name)
+            buttons[name] = btn
+            logger.info("Physical switch '%s' listening on GPIO %s", name, pin)
+        except Exception as exc:
+            logger.warning("Could not set up button '%s' on GPIO %s: %s", name, pin, exc)
+    return buttons
+
+buttons = create_buttons()
 
 # ── Schedule persistence ─────────────────────────────────
 
@@ -208,3 +246,5 @@ if __name__ == "__main__":
         app.run(host="0.0.0.0", port=8000, debug=False, use_reloader=False)
     finally:
         scheduler.shutdown()
+        for btn in buttons.values():
+            btn.close()

@@ -238,7 +238,7 @@ export default function App() {
     }
   }, [])
 
-  // Poll /states every 5s to sync physical switch changes
+  // Poll /states every 1 s to instantly reflect physical switch changes
   const pollStates = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/states`)
@@ -255,10 +255,10 @@ export default function App() {
     fetchDevices()
   }, [fetchDevices])
 
-  // Start polling once devices are loaded
+  // Start polling once devices are loaded (every 1 s for fast physical-switch sync)
   useEffect(() => {
     if (devices.length === 0) return
-    pollRef.current = setInterval(pollStates, 5000)
+    pollRef.current = setInterval(pollStates, 1000)
     return () => clearInterval(pollRef.current)
   }, [devices.length, pollStates])
 
