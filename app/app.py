@@ -7,6 +7,7 @@ import sys
 import logging
 from pathlib import Path
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
+from flask_apscheduler import APScheduler
 import atexit
 
 # Add parent directory to path for imports
@@ -82,7 +83,7 @@ def init_hardware(app):
             mode = "MOCK MODE" if MOCK_MODE else "HARDWARE MODE"
             logger.info(f"Hardware initialized successfully ({mode})")
             # Initialize API with controller
-            init_api(relay_controller)
+            init_api(relay_controller, app)
             return True
         else:
             logger.error("Failed to initialize hardware")
@@ -123,6 +124,14 @@ def create_app(config_name='default'):
     
     # Register blueprints
     app.register_blueprint(api_bp)
+    
+    # Initialize Scheduler
+    scheduler = APScheduler()
+    scheduler.init_app(app)
+    scheduler.start()
+    
+    # Store scheduler in app context if needed by API
+    app.scheduler = scheduler
     
     # Web routes
     @app.route('/')

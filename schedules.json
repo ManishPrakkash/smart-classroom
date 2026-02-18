@@ -1,0 +1,52 @@
+[
+    {
+        "id": "0d4663cf-2e44-4d02-8732-88a073953af8",
+        "name": "Evening Lights and Fans",
+        "channels": [
+            1,
+            2,
+            3,
+            4,
+            8,
+            7,
+            6,
+            5
+        ],
+        "action": "off",
+        "time": "16:10",
+        "days": [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri"
+        ],
+        "enabled": true,
+        "created_at": "2026-02-18T02:21:40.067510"
+    },
+    {
+        "id": "4bfe4b9a-3b68-40ae-9be2-836d7760c102",
+        "name": "Morning lights and fans",
+        "channels": [
+            1,
+            5,
+            2,
+            6,
+            7,
+            3,
+            4,
+            8
+        ],
+        "action": "on",
+        "time": "08:40",
+        "days": [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri"
+        ],
+        "enabled": true,
+        "created_at": "2026-02-18T08:46:21.721868"
+    }
+]
