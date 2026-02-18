@@ -1,0 +1,9 @@
+flask
+flask-cors
+gpiozero
+pigpio
+apscheduler
+
+# Alternative GPIO libraries (uncomment if needed):
+# lgpio
+# RPi.GPIO

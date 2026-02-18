@@ -1,0 +1,54 @@
+[
+  {
+    "id": "c4f8c7c8-886c-4029-b974-b9f6963e102d",
+    "label": "Test",
+    "devices": [
+      "light1",
+      "light2",
+      "light3",
+      "light4",
+      "fan1",
+      "fan2",
+      "fan3",
+      "fan4"
+    ],
+    "on_time": "13:06",
+    "off_time": "13:07",
+    "days": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "enabled": true
+  },
+  {
+    "id": "2ce55206-89d6-42ef-abc0-1ae94dec3ad4",
+    "label": "Test2",
+    "devices": [
+      "light1",
+      "fan1",
+      "fan2",
+      "light2",
+      "light3",
+      "fan3",
+      "fan4",
+      "light4"
+    ],
+    "on_time": "13:05",
+    "off_time": "16:06",
+    "days": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "enabled": true
+  }
+]
