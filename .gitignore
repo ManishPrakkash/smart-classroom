@@ -42,6 +42,10 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Firebase private key — NEVER commit this file
+backend/serviceAccountKey.json
+backend/*firebase-adminsdk*.json
+
 # Logs
 *.log
 logs/

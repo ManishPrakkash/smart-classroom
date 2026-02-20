@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Network } from '@capacitor/network'
-import { API_BASE } from './config'
-import Navbar from './Navbar'
-import SchedulePage from './SchedulePage'
+import { Network }       from '@capacitor/network'
+import { API_BASE }      from './config'
+import { useAuth }       from './AuthContext'
+import Navbar            from './Navbar'
+import SchedulePage      from './SchedulePage'
+import AdminPage         from './AdminPage'
+import AttendancePage    from './AttendancePage'
+import Login             from './Login'
 import './App.css'
 
 // ── Icons ────────────────────────────────────────────────
@@ -118,6 +122,53 @@ function Section({ title, icon, devices, states, onToggle, allOn, onAllToggle })
   )
 }
 
+// ── User Avatar / header chip ────────────────────────────
+
+function UserChip({ profile, onLogout }) {
+  const [showConfirm, setShowConfirm] = useState(false)
+
+  const initials = (profile?.displayName || profile?.rollNo || '?')
+    .split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+
+  return (
+    <>
+      <div className="user-chip" onClick={() => setShowConfirm(true)} title="Sign out">
+        <div className="user-chip__avatar">{initials}</div>
+        <div className="user-chip__info">
+          <span className="user-chip__name">{profile?.displayName || profile?.rollNo}</span>
+          {profile?.isAdmin && <span className="user-chip__badge">Admin</span>}
+        </div>
+      </div>
+
+      {showConfirm && (
+        <div className="logout-backdrop" onClick={() => setShowConfirm(false)}>
+          <div className="logout-dialog" onClick={e => e.stopPropagation()}>
+            <div className="logout-dialog__icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <polyline points="16 17 21 12 16 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <h3 className="logout-dialog__title">Sign out?</h3>
+            <p className="logout-dialog__sub">
+              Signed in as <strong>{profile?.rollNo}</strong>
+            </p>
+            <div className="logout-dialog__actions">
+              <button className="logout-btn logout-btn--cancel" onClick={() => setShowConfirm(false)}>
+                Cancel
+              </button>
+              <button className="logout-btn logout-btn--confirm" onClick={onLogout}>
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── Home Page ────────────────────────────────────────────
 
 function HomePage({ devices, states, setStates, connected, setConnected, loading, error, onRetry }) {
@@ -167,9 +218,11 @@ function HomePage({ devices, states, setStates, connected, setConnected, loading
           <h1 className="header__title">Smart Switch</h1>
           <p className="header__sub">{onCount} of {devices.length} active</p>
         </div>
-        <div className={`pill ${connected ? 'pill--on' : 'pill--off'}`}>
-          <span className="pill__dot" />
-          {connected ? 'Live' : 'Offline'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className={`pill ${connected ? 'pill--on' : 'pill--off'}`}>
+            <span className="pill__dot" />
+            {connected ? 'Live' : 'Offline'}
+          </div>
         </div>
       </header>
 
@@ -209,8 +262,11 @@ function HomePage({ devices, states, setStates, connected, setConnected, loading
 }
 
 // ── Root App ─────────────────────────────────────────────
+// Split into two: App (auth gate) + AuthenticatedApp (device logic).
+// This ensures hooks are never called conditionally.
 
-export default function App() {
+function AuthenticatedApp() {
+  const { profile, logout }       = useAuth()
   const [page, setPage]           = useState('home')
   const [devices, setDevices]     = useState([])
   const [states, setStates]       = useState({})
@@ -251,9 +307,7 @@ export default function App() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchDevices()
-  }, [fetchDevices])
+  useEffect(() => { fetchDevices() }, [fetchDevices])
 
   // Start polling once devices are loaded (every 1 s for fast physical-switch sync)
   useEffect(() => {
@@ -272,10 +326,18 @@ export default function App() {
     return () => Network.removeAllListeners()
   }, [fetchDevices])
 
+  // Guards: admin-only pages fall back to home for non-admins
+  const safePage = (page === 'admin' && !profile?.isAdmin) ? 'home' : page
+
   return (
     <div className="app">
+      {/* User chip — tapping signs out */}
+      <div className="app__user-strip">
+        <UserChip profile={profile} onLogout={logout} />
+      </div>
+
       <div className="page-content">
-        {page === 'home' ? (
+        {safePage === 'home' ? (
           <HomePage
             devices={devices}
             states={states}
@@ -286,11 +348,31 @@ export default function App() {
             error={error}
             onRetry={fetchDevices}
           />
-        ) : (
+        ) : safePage === 'schedule' ? (
           <SchedulePage allDevices={devices} />
-        )}
+        ) : safePage === 'admin' ? (
+          <AdminPage />
+        ) : safePage === 'attendance' ? (
+          <AttendancePage />
+        ) : null}
       </div>
-      <Navbar page={page} setPage={setPage} />
+
+      <Navbar page={safePage} setPage={setPage} isAdmin={profile?.isAdmin} />
     </div>
   )
+}
+
+export default function App() {
+  const { user, authLoading } = useAuth()
+
+  if (authLoading) return (
+    <div className="splash">
+      <div className="splash__spinner" />
+      <p>Loading…</p>
+    </div>
+  )
+
+  if (!user) return <Login />
+
+  return <AuthenticatedApp />
 }

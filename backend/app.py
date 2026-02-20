@@ -10,13 +10,25 @@ import ntplib
 import pytz
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from gpiozero import Button, Device, OutputDevice
 from gpiozero.pins.mock import MockFactory
 from gpiozero.exc import BadPinFactory
 
 from devices import devices, switch_pins
+
+# ── Face-detection engine (optional — disabled on machines without camera/TF) ──
+try:
+    from model.face_engine import engine as face_engine, load_students
+    _FACE_ENGINE_OK = True
+except Exception as _fe_err:
+    face_engine   = None
+    load_students = None
+    _FACE_ENGINE_OK = False
+    logging.getLogger("smart-switch").warning(
+        "face_engine unavailable: %s", _fe_err
+    )
 
 # ── App setup ────────────────────────────────────────────
 
@@ -75,6 +87,89 @@ def ntp_now() -> datetime:
 
 # Run initial NTP sync in a background thread so startup isn't blocked
 Thread(target=sync_ntp, daemon=True, name="ntp-init").start()
+
+# ── Student list (used by face engine for name→rollNo mapping) ───────────────
+# Mirrors frontend/src/students.js — keep in sync with seed_users.py
+
+STUDENTS = [
+    {"rollNo": "24CS071", "name": "HARI VIGNESH"},
+    {"rollNo": "24CS072", "name": "HARINATH S"},
+    {"rollNo": "24CS073", "name": "HARINI C"},
+    {"rollNo": "24CS074", "name": "HARINI C H"},
+    {"rollNo": "24CS075", "name": "HARINI K"},
+    {"rollNo": "24CS076", "name": "HARIPRASATH M"},
+    {"rollNo": "24CS077", "name": "HARIPRIYAN A"},
+    {"rollNo": "24CS078", "name": "HARIS BALAJEE P L"},
+    {"rollNo": "24CS079", "name": "HARISH G"},
+    {"rollNo": "24CS080", "name": "HARISH KUMAR V"},
+    {"rollNo": "24CS081", "name": "HARISH S"},
+    {"rollNo": "24CS082", "name": "HARITHA E"},
+    {"rollNo": "24CS083", "name": "HARSHAD R"},
+    {"rollNo": "24CS084", "name": "HARSHINI A"},
+    {"rollNo": "24CS085", "name": "HARSHITHA M P"},
+    {"rollNo": "24CS086", "name": "HERANYAA T P"},
+    {"rollNo": "24CS087", "name": "ILAMSARAVANBALAJI PA"},
+    {"rollNo": "24CS088", "name": "JAGATHRATCHAGAN M"},
+    {"rollNo": "24CS089", "name": "JAIANISH J"},
+    {"rollNo": "24CS090", "name": "JAISURYA S"},
+    {"rollNo": "24CS091", "name": "JASHWANTH J"},
+    {"rollNo": "24CS092", "name": "JAY PRAKASH SAH"},
+    {"rollNo": "24CS093", "name": "JAYASURIYA S"},
+    {"rollNo": "24CS094", "name": "JAYATHEERTHAN P"},
+    {"rollNo": "24CS095", "name": "JEFF JEROME JABEZ"},
+    {"rollNo": "24CS096", "name": "JENITHA M"},
+    {"rollNo": "24CS097", "name": "JOSHUA RUBERT R"},
+    {"rollNo": "24CS098", "name": "JUMAANAH BASHEETH"},
+    {"rollNo": "24CS101", "name": "KANHAIYA PATEL"},
+    {"rollNo": "24CS102", "name": "KANISH KRISHNA J P"},
+    {"rollNo": "24CS103", "name": "KANISH M R"},
+    {"rollNo": "24CS104", "name": "KANISHKA S"},
+    {"rollNo": "24CS105", "name": "KANWAL KISHORE"},
+    {"rollNo": "24CS106", "name": "KARTHIKA A"},
+    {"rollNo": "24CS107", "name": "KARUNESH A R"},
+    {"rollNo": "24CS108", "name": "KATHIRAVAN S P"},
+    {"rollNo": "24CS109", "name": "KATHIRVEL S"},
+    {"rollNo": "24CS110", "name": "KAVIN KUMAR C"},
+    {"rollNo": "24CS111", "name": "KAVIN PRAKASH T"},
+    {"rollNo": "24CS112", "name": "KAVIPRIYA P"},
+    {"rollNo": "24CS113", "name": "KAVYA K"},
+    {"rollNo": "24CS114", "name": "KAVYASRI D"},
+    {"rollNo": "24CS115", "name": "KEERTHI AANAND K S"},
+    {"rollNo": "24CS116", "name": "KHAVIYA SREE M"},
+    {"rollNo": "24CS117", "name": "KIRITH MALINI D S"},
+    {"rollNo": "24CS118", "name": "KIRITHIKA S K"},
+    {"rollNo": "24CS119", "name": "KOWSALYA V"},
+    {"rollNo": "24CS120", "name": "KRISHNA VARUN K"},
+    {"rollNo": "24CS121", "name": "KRISHNAN A"},
+    {"rollNo": "24CS122", "name": "LAVANYA R"},
+    {"rollNo": "24CS123", "name": "LOGAPRABHU S"},
+    {"rollNo": "24CS124", "name": "LOGAVARSHHNI S"},
+    {"rollNo": "24CS125", "name": "MADHANIKA M"},
+    {"rollNo": "24CS126", "name": "MADHUMITHA Y"},
+    {"rollNo": "24CS127", "name": "MADHUSREE M"},
+    {"rollNo": "24CS128", "name": "MANASA DEVI CHAPAGAIN"},
+    {"rollNo": "24CS129", "name": "MANISH BASNET"},
+    {"rollNo": "24CS130", "name": "MANISH PRAKKASH M S"},
+    {"rollNo": "24CS131", "name": "MANOJ V"},
+    {"rollNo": "24CS132", "name": "MANOJKUMAR S"},
+    {"rollNo": "24CS133", "name": "MANSUR ANSARI"},
+    {"rollNo": "24CS134", "name": "MATHIYAZHINI S"},
+    {"rollNo": "24CS135", "name": "MATHUMITHA S"},
+    {"rollNo": "24CS136", "name": "MEKALA S"},
+    {"rollNo": "24CS137", "name": "MITHRHA Y"},
+    {"rollNo": "24CS138", "name": "MOHAMED ASIF S"},
+    {"rollNo": "24CS139", "name": "MOHAMMED SUHAIL M"},
+    {"rollNo": "24CS140", "name": "MOHAN KAARTHICK C"},
+    {"rollNo": "LE01",    "name": "NAVEEN N"},
+    {"rollNo": "LE02",    "name": "SUJAY S"},
+    {"rollNo": "LE03",    "name": "ABDHUL KAREEM L"},
+]
+
+if _FACE_ENGINE_OK and load_students:
+    try:
+        load_students(STUDENTS)
+    except Exception as _ls_err:
+        logger.warning("load_students failed: %s", _ls_err)
 
 # ── GPIO setup ───────────────────────────────────────────
 
@@ -180,6 +275,20 @@ def run_schedules():
                 relay.off()
                 logger.info("[Scheduler] OFF %s (schedule: %s)", device, sched.get("label"))
 
+        # ── Auto-start camera attendance if schedule has attendance=True ──
+        if sched.get("attendance") and sched.get("on_time") == current_time:
+            if _FACE_ENGINE_OK and face_engine:
+                date_str = now.strftime("%Y-%m-%d")
+                result   = face_engine.start(session_date=date_str)
+                logger.info("[Scheduler] Auto-start camera for %s: %s",
+                            sched.get("label"), result)
+
+        if sched.get("attendance") and sched.get("off_time") == current_time:
+            if _FACE_ENGINE_OK and face_engine:
+                result = face_engine.stop()
+                logger.info("[Scheduler] Auto-stop camera for %s: %s",
+                            sched.get("label"), result)
+
 scheduler = BackgroundScheduler(timezone=TIMEZONE)
 scheduler.add_job(run_schedules, "cron", minute="*")          # every minute
 scheduler.add_job(sync_ntp,      "cron", hour="*", minute=0)  # re-sync every hour
@@ -261,13 +370,14 @@ def create_schedule():
         return jsonify({"error": f"Missing fields: {required - data.keys()}"}), 400
 
     schedule = {
-        "id":       str(uuid.uuid4()),
-        "label":    data.get("label", "Untitled"),
-        "devices":  data["devices"],
-        "on_time":  data["on_time"],
-        "off_time": data["off_time"],
-        "days":     data.get("days", list(range(7))),
-        "enabled":  data.get("enabled", True),
+        "id":         str(uuid.uuid4()),
+        "label":      data.get("label", "Untitled"),
+        "devices":    data["devices"],
+        "on_time":    data["on_time"],
+        "off_time":   data["off_time"],
+        "days":       data.get("days", list(range(7))),
+        "enabled":    data.get("enabled", True),
+        "attendance": data.get("attendance", False),  # auto-start camera when True
     }
 
     with schedules_lock:
@@ -288,6 +398,59 @@ def delete_schedule(sched_id):
         save_schedules(new)
     logger.info("Deleted schedule %s", sched_id)
     return jsonify({"deleted": sched_id})
+
+# ── Camera / Attendance routes ───────────────────────────────────────────────
+
+@app.route("/attendance/camera", methods=["GET"])
+def camera_status():
+    """Return current face-detection engine status."""
+    if not _FACE_ENGINE_OK or face_engine is None:
+        return jsonify({"available": False,
+                        "reason": "face_engine not available on this server"})
+    status = face_engine.get_status()
+    status["available"] = True
+    return jsonify(status)
+
+
+@app.route("/attendance/camera/start", methods=["POST"])
+def camera_start():
+    """Manually start a face-detection session for the given date (or today)."""
+    if not _FACE_ENGINE_OK or face_engine is None:
+        return jsonify({"ok": False, "reason": "face_engine not available"}), 503
+
+    data = request.get_json(force=True, silent=True) or {}
+    date_str = data.get("date") or ntp_now().strftime("%Y-%m-%d")
+    result   = face_engine.start(session_date=date_str)
+    code     = 200 if result["ok"] else 409
+    return jsonify(result), code
+
+
+@app.route("/attendance/camera/stop", methods=["POST"])
+def camera_stop():
+    """Stop the running face-detection session."""
+    if not _FACE_ENGINE_OK or face_engine is None:
+        return jsonify({"ok": False, "reason": "face_engine not available"}), 503
+    result = face_engine.stop()
+    return jsonify(result)
+
+
+@app.route("/attendance/camera/frame", methods=["GET"])
+def camera_frame():
+    """Return the latest annotated JPEG frame from the face-detection engine."""
+    if not _FACE_ENGINE_OK or face_engine is None:
+        return ("", 204)
+    jpeg = face_engine.get_frame()
+    if jpeg is None:
+        return ("", 204)
+    return Response(
+        jpeg,
+        mimetype="image/jpeg",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma":        "no-cache",
+        },
+    )
+
 
 @app.route("/schedules/<sched_id>/toggle", methods=["PATCH"])
 def toggle_schedule(sched_id):

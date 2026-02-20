@@ -1,0 +1,4 @@
+{
+  "_comment": "Add entries here ONLY for pkl names that auto-mapping cannot resolve (ambiguous first names, etc).",
+  "_format": "{ \"<pkl_label_exact_lowercase>\": \"<rollNo>\" }"
+}

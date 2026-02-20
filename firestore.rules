@@ -1,0 +1,84 @@
+// ── Firestore Security Rules ───────────────────────────────────────────────────
+// Deploy with:  firebase deploy --only firestore:rules
+//
+// Design:
+//   • Only authenticated users can read/write.
+//   • Users can read their own document and update safe fields (displayName).
+//   • Admins (isAdmin=true in their own doc) can read ALL user documents.
+//   • Only admins can write isAdmin on ANY document.
+//   • No user can read or write other users' documents (except admins).
+//   • Unauthenticated requests are always denied.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: get the calling user's Firestore profile
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Helper: is the caller an admin?
+    function isAdmin() {
+      return request.auth != null && myProfile().isAdmin == true;
+    }
+
+    // Helper: caller is authenticated
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // ── /users/{uid} ──────────────────────────────────────────────────────────
+    match /users/{uid} {
+
+      // READ: own doc always; all docs if admin
+      allow read: if isAuthed() && (request.auth.uid == uid || isAdmin());
+
+      // CREATE: only via Firebase Auth → server-side (seed script / admin SDK)
+      //         Deny from client to prevent self-registration
+      allow create: if false;
+
+      // UPDATE:
+      //   • A user can update their own displayName only (not isAdmin, rollNo, etc.)
+      //   • An admin can update any field on any document
+      allow update: if isAuthed() && (
+        // Admin can do anything
+        isAdmin()
+        ||
+        // Non-admin can only change their own displayName
+        (
+          request.auth.uid == uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['displayName'])
+        )
+      );
+
+      // DELETE: nobody (users are managed via admin SDK / seed script)
+      allow delete: if false;
+    }
+
+    // ── /attendance/{date} ────────────────────────────────────────────────────
+    // Parent summary doc + /records/{rollNo} subcollection
+    match /attendance/{date} {
+      // Any authenticated user can read the summary doc (to check if day is saved)
+      allow read: if isAuthed();
+      // Only admins can create or update the summary doc
+      allow create, update: if isAdmin();
+      allow delete: if false;
+
+      match /records/{rollNo} {
+        // Any authenticated user can read individual records
+        allow read: if isAuthed();
+        // Only admins can write records (batch write from AttendancePage)
+        allow create, update: if isAdmin();
+        allow delete: if false;
+      }
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

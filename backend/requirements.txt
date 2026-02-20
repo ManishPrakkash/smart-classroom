@@ -6,6 +6,16 @@ apscheduler
 ntplib        # NTP time sync — keeps schedules accurate without an RTC chip
 pytz          # Timezone support
 
+# Firebase Admin SDK — writes attendance to Firestore from the Pi
+firebase-admin
+
+# Face-detection stack (install separately on Pi due to TF wheel constraints)
+# deepface
+# tensorflow==2.15.0
+# tf-keras
+# opencv-python-headless
+# picamera2            # Raspberry Pi camera (pre-installed on Pi OS)
+
 # Alternative GPIO libraries (uncomment if needed):
 # lgpio
 # RPi.GPIO

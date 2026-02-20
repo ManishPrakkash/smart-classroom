@@ -9,6 +9,169 @@
   overflow: hidden;
 }
 
+/* ── User chip strip (top-right, above header) ── */
+.app__user-strip {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 16px 0;
+  background: var(--bg);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 15;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px 5px 5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.user-chip:hover { border-color: rgba(248,113,113,0.4); }
+.user-chip:active { opacity: 0.8; }
+
+.user-chip__avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1.5px solid rgba(124,111,247,0.35);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.user-chip__info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.user-chip__name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-chip__badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  line-height: 1;
+}
+
+/* ── Logout confirmation dialog ── */
+.logout-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.logout-dialog {
+  width: 100%;
+  max-width: 300px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  animation: popIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.logout-dialog__icon {
+  width: 52px; height: 52px;
+  border-radius: 16px;
+  background: rgba(248,113,113,0.1);
+  border: 1px solid rgba(248,113,113,0.2);
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.logout-dialog__title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.3px;
+}
+
+.logout-dialog__sub {
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+.logout-dialog__sub strong {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.logout-dialog__actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.logout-btn {
+  flex: 1;
+  padding: 11px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  border: none;
+}
+.logout-btn:active { transform: scale(0.97); }
+
+.logout-btn--cancel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.logout-btn--cancel:hover { border-color: var(--border-hover); }
+
+.logout-btn--confirm {
+  background: rgba(248,113,113,0.15);
+  border: 1px solid rgba(248,113,113,0.3);
+  color: var(--red);
+}
+.logout-btn--confirm:hover { background: rgba(248,113,113,0.25); }
+
 .page-content {
   flex: 1;
   display: flex;
