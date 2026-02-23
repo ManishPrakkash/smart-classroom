@@ -109,13 +109,14 @@ function getPillLabel(status, odType) {
 // Attendance syncs automatically via Firestore onSnapshot in the parent.
 
 const POLL_MS = 2000 // poll every 2s while running
+const FRAME_POLL_MS = 400 // poll frames every 400ms for smooth preview
 
 function CameraPanel({ date, isAdmin }) {
   const [status,   setStatus] = useState(null)
   const [busy,     setBusy]   = useState(false)
   const [error,    setError]  = useState(null)
-  const frameRef   = useRef(null)
-  const frameTimer = useRef(null)
+  const [frameUrl, setFrameUrl] = useState(null)
+  const [frameError, setFrameError] = useState(false)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -136,16 +137,23 @@ function CameraPanel({ date, isAdmin }) {
     return () => clearInterval(t)
   }, [fetchStatus, status?.state])
 
-  // Refresh live frame every 200 ms while running
+  // Frame polling (only when running)
   useEffect(() => {
-    clearInterval(frameTimer.current)
-    if (status?.state === 'running') {
-      frameTimer.current = setInterval(() => {
-        if (frameRef.current)
-          frameRef.current.src = `${API_BASE}/attendance/camera/frame?t=${Date.now()}`
-      }, 200)
+    if (status?.state !== 'running') {
+      setFrameUrl(null)
+      setFrameError(false)
+      return
     }
-    return () => clearInterval(frameTimer.current)
+
+    const updateFrame = () => {
+      // Add timestamp to prevent browser caching
+      setFrameUrl(`${API_BASE}/attendance/camera/frame?t=${Date.now()}`)
+      setFrameError(false)
+    }
+
+    updateFrame()
+    const interval = setInterval(updateFrame, FRAME_POLL_MS)
+    return () => clearInterval(interval)
   }, [status?.state])
 
   async function handleStart() {
@@ -167,7 +175,6 @@ function CameraPanel({ date, isAdmin }) {
     setBusy(true)
     try {
       await fetch(`${API_BASE}/attendance/camera/stop`, { method: 'POST' })
-      clearInterval(frameTimer.current)
       fetchStatus()
     } catch { setError('Could not reach backend') }
     finally { setBusy(false) }
@@ -183,7 +190,7 @@ function CameraPanel({ date, isAdmin }) {
       <div className="cam-panel__head">
         <span className={`cam-dot ${running ? 'cam-dot--live' : ''}`} />
         <span className="cam-panel__title">
-          {running ? 'Face Detection — Scanning…' : 'Face Detection'}
+          {running ? 'Scanning…' : 'Attendance Scan'}
         </span>
         {running && status?.fps > 0 && (
           <span className="cam-panel__fps">{status.fps} fps</span>
@@ -199,23 +206,30 @@ function CameraPanel({ date, isAdmin }) {
         )}
       </div>
 
-      {/* Live annotated camera feed */}
+      {/* Camera preview and scanning status */}
       {running && (
-        <div className="cam-feed-wrap">
-          <img
-            ref={frameRef}
-            className="cam-feed"
-            alt="Live camera"
-            src={`${API_BASE}/attendance/camera/frame?t=${Date.now()}`}
-            onError={e => { e.target.style.display = 'none' }}
-            onLoad={e  => { e.target.style.display = 'block' }}
-          />
-          <div className="cam-feed__overlay">
+        <div className="cam-panel__body">
+          {frameUrl && !frameError ? (
+            <div className="cam-panel__preview">
+              <img
+                src={frameUrl}
+                alt="Camera feed"
+                className="cam-panel__video"
+                onError={() => setFrameError(true)}
+              />
+            </div>
+          ) : (
+            <div className="cam-panel__scanning">
+              {frameError
+                ? <span>⚠️ Preview unavailable</span>
+                : <span>Loading preview…</span>
+              }
+            </div>
+          )}
+          <div className="cam-panel__status">
             {detected.length === 0
-              ? <span className="cam-feed__hint">Scanning for faces…</span>
-              : <span className="cam-feed__hint cam-feed__hint--ok">
-                  {detected.length} student{detected.length > 1 ? 's' : ''} confirmed present ✓
-                </span>
+              ? <span>Scanning for faces…</span>
+              : <span>{detected.length} student{detected.length > 1 ? 's' : ''} confirmed present ✓</span>
             }
           </div>
         </div>
@@ -508,7 +522,7 @@ function ExportSheet({ date, records, onClose }) {
 // â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function AttendancePage() {
-  const { profile } = useAuth()
+  const { profile, logout } = useAuth()
   const isAdmin = !!profile?.isAdmin
 
   const [date,       setDate]       = useState(todayISO)
@@ -695,18 +709,31 @@ export default function AttendancePage() {
           <p className="att-header__sub">CSE-B &middot; {STUDENTS.length} students</p>
         </div>
         <div className="att-header__right">
-          {saveState === 'saving' && <span className="att-saved-badge att-saved-badge--saving">Saving…</span>}
-          {saveState === 'saved'  && <span className="att-saved-badge att-saved-badge--ok">✓ Saved</span>}
-          {saveState === 'error'  && <span className="att-saved-badge att-saved-badge--err">! Failed</span>}
-          {saveState === 'dirty'  && <span className="att-saved-badge att-saved-badge--dirty">Unsaved</span>}
-          <button className="att-icon-btn" onClick={() => setShowExport(true)} title="Export report">
-            <IconShare />
-          </button>
+          {/* User chip */}
+          <div className="att-user-chip" onClick={logout} title="Sign out">
+            <div className="att-user-chip__avatar">
+              {(profile?.displayName || profile?.rollNo || '?')
+                .split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+            </div>
+            <div className="att-user-chip__info">
+              <span className="att-user-chip__name">{profile?.displayName || profile?.rollNo}</span>
+              {profile?.isAdmin && <span className="att-user-chip__badge">Admin</span>}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Date bar */}
-      <DateBar date={date} onChange={setDate} />
+      {/* Save badge + export — second row */}
+      <div className="att-subheader">
+        <div style={{ flex: 1 }} />
+        {saveState === 'saving' && <span className="att-saved-badge att-saved-badge--saving">Saving…</span>}
+        {saveState === 'saved'  && <span className="att-saved-badge att-saved-badge--ok">✓ Saved</span>}
+        {saveState === 'error'  && <span className="att-saved-badge att-saved-badge--err">! Failed</span>}
+        {saveState === 'dirty'  && <span className="att-saved-badge att-saved-badge--dirty">Unsaved</span>}
+        <button className="att-icon-btn" onClick={() => setShowExport(true)} title="Export report">
+          <IconShare />
+        </button>
+      </div>
 
       {/* Camera face-detection panel */}
       <CameraPanel date={date} isAdmin={isAdmin} />

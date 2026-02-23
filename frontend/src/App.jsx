@@ -171,7 +171,7 @@ function UserChip({ profile, onLogout }) {
 
 // ── Home Page ────────────────────────────────────────────
 
-function HomePage({ devices, states, setStates, connected, setConnected, loading, error, onRetry }) {
+function HomePage({ devices, states, setStates, connected, setConnected, loading, error, onRetry, profile, logout }) {
   const lights = devices.filter(d => d.toLowerCase().includes('light'))
   const fans   = devices.filter(d => d.toLowerCase().includes('fan'))
   const allLightsOn = lights.length > 0 && lights.every(d => states[d])
@@ -219,6 +219,7 @@ function HomePage({ devices, states, setStates, connected, setConnected, loading
           <p className="header__sub">{onCount} of {devices.length} active</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <UserChip profile={profile} onLogout={logout} />
           <div className={`pill ${connected ? 'pill--on' : 'pill--off'}`}>
             <span className="pill__dot" />
             {connected ? 'Live' : 'Offline'}
@@ -331,11 +332,6 @@ function AuthenticatedApp() {
 
   return (
     <div className="app">
-      {/* User chip — tapping signs out */}
-      <div className="app__user-strip">
-        <UserChip profile={profile} onLogout={logout} />
-      </div>
-
       <div className="page-content">
         {safePage === 'home' ? (
           <HomePage
@@ -346,8 +342,8 @@ function AuthenticatedApp() {
             setConnected={setConnected}
             loading={loading}
             error={error}
-            onRetry={fetchDevices}
-          />
+            onRetry={fetchDevices}            profile={profile}
+            logout={logout}          />
         ) : safePage === 'schedule' ? (
           <SchedulePage allDevices={devices} />
         ) : safePage === 'admin' ? (

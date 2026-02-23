@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { API_BASE } from './config'
+import { useAuth } from './AuthContext'
 import './SchedulePage.css'
 
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -247,6 +248,11 @@ export default function SchedulePage({ allDevices }) {
     }
   }
 
+  const { profile, logout } = useAuth()
+  const initials = (profile?.displayName || profile?.rollNo || '?')
+    .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const displayName = profile?.displayName || profile?.rollNo || 'User'
+
   return (
     <div className="sched-page">
       <header className="sched-header">
@@ -254,12 +260,21 @@ export default function SchedulePage({ allDevices }) {
           <h1 className="sched-title">Schedules</h1>
           <p className="sched-sub">{schedules.length} schedule{schedules.length !== 1 ? 's' : ''}</p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="user-chip" onClick={logout}>
+          <div className="user-chip__avatar">{initials}</div>
+          <div className="user-chip__info">
+            <span className="user-chip__name">{displayName}</span>
+            {profile?.isAdmin && <span className="user-chip__badge">Admin</span>}
+          </div>
+        </div>
         <button className="fab" onClick={() => setShowForm(true)}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
             <line x1="12" y1="5" x2="12" y2="19" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
             <line x1="5" y1="12" x2="19" y2="12" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
           </svg>
         </button>
+        </div>
       </header>
 
       <ServerClock />

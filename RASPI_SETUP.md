@@ -1,6 +1,49 @@
 # Raspberry Pi Setup Guide - Smart Classroom
 
-## Quick Setup Commands
+> **Supported Models:** Raspberry Pi 3, 4, 5  
+> **Camera Support:** Camera Module 3, Camera Module 2, USB Webcams
+
+## Raspberry Pi 5 with Camera Module 3
+
+For **Raspberry Pi 5** users, the setup script automatically detects your hardware and installs **lgpio** instead of pigpio. Camera Module 3 is fully supported via `picamera2`.
+
+### Quick Start (RPi 5 + Camera Module 3)
+
+1. **Clone the repository:**
+   ```bash
+   cd ~
+   git clone <your-repo-url> smart-classroom
+   cd smart-classroom/backend
+   ```
+
+2. **Run the startup script:**
+   ```bash
+   chmod +x start_backend.sh
+   ./start_backend.sh
+   ```
+
+The script will automatically:
+- Detect Raspberry Pi 5 and install `lgpio`
+- Detect Camera Module 3 and configure `picamera2`
+- Install all required dependencies
+- Start the backend server
+
+### Verify Camera Module 3
+
+```bash
+libcamera-hello --list-cameras
+```
+
+You should see output like:
+```
+Available cameras
+-----------------
+0 : imx708 [4608x2592] (/base/axi/pcie@120000/rp1/i2c@80000/imx708@1a)
+```
+
+---
+
+## Manual Setup (All Models)
 
 ### 1. Update System
 ```bash
@@ -9,21 +52,34 @@ sudo apt upgrade -y
 ```
 
 ### 2. Install Python & GPIO Dependencies
+
+**For Raspberry Pi 3/4:**
 ```bash
 sudo apt install python3 python3-pip python3-venv -y
-sudo apt install pigpio python3-pigpio swig python3-dev -y
+sudo apt install pigpio python3-pigpio -y
 ```
 
-**Enable pigpio daemon:**
+**For Raspberry Pi 5:**
+```bash
+sudo apt install python3 python3-pip python3-venv -y
+sudo apt install python3-lgpio -y
+```
+
+**Enable pigpio daemon (RPi 3/4 only):**
 ```bash
 sudo systemctl enable pigpiod
 sudo systemctl start pigpiod
 ```
 
-**Add user to GPIO group (avoid sudo):**
+**Add user to GPIO group:**
 ```bash
 sudo usermod -a -G gpio $USER
 # Logout and login again for group changes to take effect
+```
+
+**Install Camera Support (if using Pi Camera Module):**
+```bash
+sudo apt install python3-picamera2 python3-libcamera -y
 ```
 
 ### 3. Create Project Directory

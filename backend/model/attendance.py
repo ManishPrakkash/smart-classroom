@@ -85,7 +85,6 @@ frame_index = 0
 
 fps_estimate = 0.0
 last_frame_time = time.time()
-last_results = []
 
 embeddings_data = None
 embeddings = None
@@ -126,7 +125,6 @@ try:
         last_frame_time = now_frame
 
         if frame_index % detect_every == 0:
-            last_results = []
             detect_frame = frame
             if detection_scale != 1.0:
                 detect_frame = cv2.resize(
@@ -162,7 +160,6 @@ try:
                 h = int(area.get("h", 0) * scale)
 
                 name = "Unknown"
-                confidence = 0.0
                 if embeddings is not None and embeddings.size > 0 and embedding_names:
                     try:
                         reps = DeepFace.represent(
@@ -200,7 +197,7 @@ try:
 
                             if best_dist < adaptive_threshold and (second_dist - best_dist) >= 0.04:
                                 name = best_name
-                else:
+                else:  # fallback: DeepFace.find against dataset folder
                     try:
                         dfs = DeepFace.find(
                             img_path=face,
@@ -225,49 +222,16 @@ try:
                         if threshold is not None and distance is not None and distance > threshold:
                             name = "Unknown"
 
-                        if distance is not None:
-                            confidence = max(0.0, min(1.0, 1.0 - distance)) * 100.0
-
                 if name != "Unknown":
                     votes[name] = votes.get(name, 0) + 1
                     if votes[name] >= vote_required:
                         present.add(name)
-
-                label = f"{name} ({confidence:.1f}%)"
-                last_results.append(((x, y, x + w, y + h), label))
-
-        for (left, top, right, bottom), label in last_results:
-            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-            cv2.putText(
-                frame,
-                label,
-                (left, top - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2,
-            )
-
-        cv2.putText(
-            frame,
-            f"Preview FPS: {fps_estimate:.1f} | Detect every {detect_every} | {model_name}/{detector_backend}",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 255, 0),
-            2,
-        )
-
-        cv2.imshow("Attendance Camera", frame)
-
-        if cv2.waitKey(1) == 27:
-            break
+                        print(f"[PRESENT] {name}  (votes={votes[name]})")
 finally:
     if cam is not None:
         cam.release()
     if picam2 is not None:
         picam2.stop()
-    cv2.destroyAllWindows()
 
 with open("attendance.csv", "a") as f:
     for name in present:

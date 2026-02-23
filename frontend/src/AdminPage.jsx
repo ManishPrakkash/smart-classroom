@@ -58,7 +58,10 @@ function UserRow({ user, currentUid, onToggleAdmin }) {
 // ── Admin Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const { profile }      = useAuth()
+  const { profile, logout } = useAuth()
+  const initials    = (profile?.displayName || profile?.rollNo || '?')
+                        .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const displayName = profile?.displayName || profile?.rollNo || 'User'
   const [users,  setUsers]   = useState([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
@@ -106,6 +109,21 @@ export default function AdminPage() {
           <h1 className="sched-title">Admin Panel</h1>
           <p className="sched-sub">{users.length} users &bull; {adminCount} admin{adminCount !== 1 ? 's' : ''}</p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {(() => {
+          const initials = (profile?.displayName || profile?.rollNo || '?')
+            .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+          const displayName = profile?.displayName || profile?.rollNo || 'User'
+          return (
+            <div className="user-chip" onClick={logout}>
+          <div className="user-chip__avatar">{initials}</div>
+          <div className="user-chip__info">
+            <span className="user-chip__name">{displayName}</span>
+            {profile?.isAdmin && <span className="user-chip__badge">Admin</span>}
+          </div>
+        </div>
+          )
+        })()}
         <button className="admin-refresh" onClick={fetchUsers} title="Refresh">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M1 4v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -114,6 +132,7 @@ export default function AdminPage() {
               stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
+        </div>
       </header>
 
       {/* Search */}
