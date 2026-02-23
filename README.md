@@ -31,4 +31,19 @@ Open your browser: `http://localhost:3000`
 3. Configure for network access to test on actual mobile devices
 4. Consider wrapping with Capacitor/React Native for native app
 
+## Raspberry Pi Deployment
+
+Deploying to Raspberry Pi 3, 4, or 5? See **[RASPI_SETUP.md](RASPI_SETUP.md)** for:
+- Automatic hardware detection (Pi model, Camera Module)
+- GPIO configuration (lgpio for RPi 5, pigpio for older models)
+- Camera Module 3 support
+- Troubleshooting slow networks and piwheels timeouts
+
+**Quick deploy:**
+```bash
+cd backend
+chmod +x start_backend.sh
+./start_backend.sh
+```
+
 Enjoy your Smart Classroom automation system! 🚀

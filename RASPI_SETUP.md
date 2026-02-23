@@ -325,6 +325,77 @@ curl http://localhost:5000/control/light1/off
 
 ---
 
+## Troubleshooting
+
+### Slow Network / piwheels Timeout
+
+If you see errors like `ReadTimeoutError` when installing packages from piwheels:
+
+**Solution 1: The startup script handles this automatically** (recommended)
+```bash
+# Just run the script - it has built-in retry logic and extended timeouts
+./start_backend.sh
+```
+
+**Solution 2: Manual pip configuration** (if needed)
+```bash
+# Create pip config file with longer timeouts
+mkdir -p ~/.config/pip
+cat > ~/.config/pip/pip.conf << EOF
+[global]
+timeout = 100
+retries = 5
+EOF
+
+# Then retry installation
+pip install -r requirements.txt
+```
+
+**Solution 3: Install dependencies one by one** (for very slow connections)
+```bash
+# Install critical packages first
+pip install flask flask-cors --timeout 200
+pip install gpiozero pigpio --timeout 200
+pip install apscheduler pytz ntplib --timeout 200
+pip install firebase-admin --timeout 200
+```
+
+### Camera Not Detected
+
+```bash
+# Check camera connection
+libcamera-hello --list-cameras
+
+# If camera not found, check ribbon cable connection
+# Ensure camera is enabled in raspi-config:
+sudo raspi-config
+# Navigate to: Interface Options -> Camera -> Enable
+```
+
+### GPIO Permissions Error
+
+```bash
+# Add user to gpio group
+sudo usermod -a -G gpio $USER
+
+# Logout and login again, or reboot
+sudo reboot
+```
+
+### Port Already in Use
+
+```bash
+# Check what's using port 8000
+sudo lsof -i :8000
+
+# Kill the process
+sudo kill <PID>
+
+# Or use a different port by editing app.py
+```
+
+---
+
 ## Summary
 
 ✅ Install Python 3 and pip  

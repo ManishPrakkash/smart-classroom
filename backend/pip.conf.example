@@ -1,0 +1,24 @@
+# Pip Configuration for Raspberry Pi
+# Copy this to ~/.config/pip/pip.conf to use system-wide
+# Or to your venv: venv/pip.conf
+
+[global]
+# Increase timeout for slow networks (default is 15 seconds)
+timeout = 100
+
+# Number of retries for failed connections
+retries = 5
+
+# Connection timeout (separate from read timeout)
+# default-timeout = 100
+
+# Uncomment to disable piwheels and use PyPI only (if piwheels is consistently slow)
+# extra-index-url = 
+# no-index = false
+
+[install]
+# Show progress for long-running installs
+progress-bar = on
+
+# Uncomment to prefer binary wheels over source distributions
+# prefer-binary = true

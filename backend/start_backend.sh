@@ -94,16 +94,30 @@ echo "      Python: $(which python)  ($(python --version))"
 
 # ── Step 4: Dependencies ──────────────────────────────────────────────────────
 echo -e "${GREEN}[4/5] Dependencies ...${NC}"
-pip install --quiet --upgrade pip
 
-# Install base requirements
-pip install --quiet -r requirements.txt
+# Configure pip with longer timeouts and retries for slow networks
+export PIP_DEFAULT_TIMEOUT=100
+export PIP_RETRIES=5
+
+echo "      Upgrading pip..."
+pip install --quiet --upgrade pip --timeout 100 --retries 5
+
+# Install base requirements with increased timeout
+echo "      Installing dependencies from requirements.txt ..."
+if ! pip install --quiet -r requirements.txt --timeout 100 --retries 5; then
+    echo -e "      ${YELLOW}Retrying with connection timeout adjustments...${NC}"
+    # Retry with even longer timeout
+    pip install -r requirements.txt --timeout 200 --retries 3 --default-timeout=200 || {
+        echo -e "      ${RED}Failed to install dependencies. Check network connection.${NC}"
+        echo -e "      ${YELLOW}You may need to install manually or use: pip install --no-index --find-links=file:///path/to/wheels${NC}"
+    }
+fi
 
 # Install GPIO backend based on Pi model
 if [ "$USE_MOCK_GPIO" = "0" ]; then
     if [ "$RPI_MODEL" = "5" ]; then
         echo "      Installing lgpio for Raspberry Pi 5..."
-        pip install --quiet lgpio || echo -e "      ${YELLOW}Warning: lgpio install failed${NC}"
+        pip install --quiet lgpio --timeout 100 --retries 5 || echo -e "      ${YELLOW}Warning: lgpio install failed${NC}"
     else
         # pigpio already in requirements.txt for RPi 3/4
         echo "      Using pigpio for Raspberry Pi 3/4"
@@ -114,7 +128,7 @@ fi
 if [ "$CAMERA_AVAILABLE" = "1" ]; then
     echo "      Installing camera dependencies..."
     # picamera2 is usually pre-installed on Pi OS Bullseye+
-    pip install --quiet picamera2 2>/dev/null || echo "      picamera2 already installed (system package)"
+    pip install --quiet picamera2 --timeout 100 2>/dev/null || echo "      picamera2 already installed (system package)"
 fi
 
 echo "      All packages installed."
