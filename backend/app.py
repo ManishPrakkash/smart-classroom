@@ -18,6 +18,15 @@ from gpiozero.exc import BadPinFactory
 
 from devices import devices, switch_pins
 
+# ── Slider motor (runs during attendance scan) ────────────────────────────────
+try:
+    from slider_motor import slider as _slider
+    _SLIDER_OK = True
+except Exception as _sl_err:
+    _slider = None
+    _SLIDER_OK = False
+    logging.getLogger("smart-switch").warning("slider_motor unavailable: %s", _sl_err)
+
 # ── Face-detection engine (optional — disabled on machines without camera/TF) ──
 try:
     from model.face_engine import engine as face_engine, load_students
@@ -421,7 +430,13 @@ def camera_start():
     data = request.get_json(force=True, silent=True) or {}
     date_str = data.get("date") or ntp_now().strftime("%Y-%m-%d")
     result   = face_engine.start(session_date=date_str)
-    code     = 200 if result["ok"] else 409
+
+    # Start slider motor alongside the camera scan
+    if result.get("ok") and _SLIDER_OK and _slider is not None:
+        started = _slider.start()
+        logger.info("[Slider] start with scan: %s", "ok" if started else "failed")
+
+    code = 200 if result["ok"] else 409
     return jsonify(result), code
 
 
@@ -431,6 +446,12 @@ def camera_stop():
     if not _FACE_ENGINE_OK or face_engine is None:
         return jsonify({"ok": False, "reason": "face_engine not available"}), 503
     result = face_engine.stop()
+
+    # Stop slider motor alongside the camera scan
+    if _SLIDER_OK and _slider is not None:
+        _slider.stop()
+        logger.info("[Slider] stopped with scan")
+
     return jsonify(result)
 
 
@@ -473,3 +494,5 @@ if __name__ == "__main__":
         scheduler.shutdown()
         for btn in buttons.values():
             btn.close()
+        if _SLIDER_OK and _slider is not None:
+            _slider.close()
