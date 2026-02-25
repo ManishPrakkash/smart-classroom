@@ -1,5 +1,5 @@
 devices = {
-    "light1": 17,
+    "light1":  4,   # moved from 17 (17 is now Motor A IN2 on slider)
     "light2": 18,
     "light3": 27,
     "light4": 22,
