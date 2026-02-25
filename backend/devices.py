@@ -1,5 +1,5 @@
 devices = {
-    "light1": 14,   # GPIO14 (UART TX - free on RPi5 Bookworm); 17→slider IN2, 4→1-Wire busy
+    "light1":  3,   # GPIO3 (I2C SCL, free if no I2C devices); 17→slider, 4→1-Wire, 14→UART busy
     "light2": 18,
     "light3": 27,
     "light4": 22,
