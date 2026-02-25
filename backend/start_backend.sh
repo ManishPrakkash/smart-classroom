@@ -84,7 +84,21 @@ VENV_DIR="$SCRIPT_DIR/venv"
 
 if [ ! -d "$VENV_DIR" ]; then
     echo "      Creating venv ..."
-    python3 -m venv "$VENV_DIR"
+    # TensorFlow requires Python 3.11 or 3.12 — prefer python3.11 over system default
+    if command -v python3.11 &>/dev/null; then
+        PYTHON_BIN="python3.11"
+        echo "      Using Python 3.11 (TensorFlow compatible)"
+    elif command -v python3.12 &>/dev/null; then
+        PYTHON_BIN="python3.12"
+        echo "      Using Python 3.12 (TensorFlow compatible)"
+    else
+        PYTHON_BIN="python3"
+        PY_VER=$(python3 -c "import sys; print(sys.version_info[:2])")
+        echo -e "      ${YELLOW}Warning: python3.11/3.12 not found, using system python3 $PY_VER${NC}"
+        echo -e "      ${YELLOW}TensorFlow may fail if version is 3.13+. Install with:${NC}"
+        echo -e "      ${YELLOW}  sudo apt install python3.11 python3.11-venv python3.11-dev -y${NC}"
+    fi
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 
 # Activate

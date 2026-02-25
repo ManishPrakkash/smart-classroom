@@ -11,8 +11,13 @@ firebase-admin
 
 # Face-detection stack (optional - uncomment to enable attendance scanning)
 # deepface
-# tensorflow==2.15.0
-# tf-keras
 # opencv-python-headless
+# tf-keras
+#
+# TensorFlow — install manually based on your hardware:
+#   Raspberry Pi 5 (aarch64, Python 3.11):  pip install tensorflow==2.20.0 tf-keras
+#   Raspberry Pi 3/4 (armv7l):              pip install tensorflow==2.20.0 tf-keras
+#   Dev machine (x86_64):                   pip install tensorflow tf-keras
+#
 # Note: picamera2 is pre-installed on Raspberry Pi OS Bullseye+
 # Note: lgpio is installed automatically by the startup script on Raspberry Pi 5

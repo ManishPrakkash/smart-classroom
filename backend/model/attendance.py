@@ -13,7 +13,7 @@ os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 def validate_tensorflow() -> None:
     if sys.version_info >= (3, 13):
         raise RuntimeError(
-            "Python 3.13 is not supported by TensorFlow on Raspberry Pi. "
+            "Python 3.13 is not supported by TensorFlow. "
             "Use Python 3.11 or 3.10 in your venv."
         )
 
@@ -21,21 +21,31 @@ def validate_tensorflow() -> None:
         import tensorflow as tf  # noqa: F401
     except Exception as exc:
         raise RuntimeError(
-            "TensorFlow is missing. Install a supported TensorFlow build for Raspberry Pi "
-            "(e.g., tensorflow==2.15.x) and tf-keras, then retry."
+            "TensorFlow is missing. On Raspberry Pi 5 (aarch64), install with:\n"
+            "  pip install tensorflow==2.20.0 tf-keras\n"
+            "On Raspberry Pi 3/4 (armv7l), use:\n"
+            "  pip install tensorflow==2.20.0 tf-keras"
         ) from exc
 
     if not hasattr(tf, "__version__"):
         raise RuntimeError(
-            "Your TensorFlow install is broken (missing __version__). "
-            "Reinstall a supported TensorFlow build for Raspberry Pi and tf-keras."
+            "TensorFlow install appears broken (missing __version__). "
+            "Try: pip install --force-reinstall tensorflow tf-keras"
+        )
+
+    # Accept TF 2.15+ (RPi 3/4) and TF 2.20+ (RPi 5 aarch64)
+    major, minor = (int(x) for x in tf.__version__.split(".")[:2])
+    if (major, minor) < (2, 15):
+        raise RuntimeError(
+            f"TensorFlow {tf.__version__} is too old. Need 2.15 or newer. "
+            "Run: pip install --upgrade tensorflow tf-keras"
         )
 
 
 try:
     validate_tensorflow()
 except RuntimeError as exc:
-    print(f"Startup error: {exc}")
+    print(f"[attendance] TensorFlow validation failed: {exc}")
     raise SystemExit(1)
 
 from deepface import DeepFace

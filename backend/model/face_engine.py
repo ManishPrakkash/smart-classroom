@@ -55,6 +55,92 @@ try:
 except Exception:
     _PICAM_OK = False
 
+# ── libcamera-vid subprocess fallback (RPi 5 with Python != system ver) ───────
+import shutil as _shutil
+_LIBCAM_BIN = _shutil.which("libcamera-vid") or _shutil.which("rpicam-vid")
+_LIBCAM_OK  = (not _PICAM_OK) and (_LIBCAM_BIN is not None)
+
+
+class _LibcameraCapture:
+    """Read MJPEG frames from a libcamera-vid subprocess.
+
+    Used on RPi 5 when picamera2 Python bindings are compiled for a different
+    Python version than the one running in the venv (e.g. system 3.13 vs
+    pyenv 3.11).  Spawns `libcamera-vid --codec mjpeg -o -` and decodes JPEG
+    frames from the raw byte stream.
+    """
+
+    _SOI = b"\xff\xd8"
+    _EOI = b"\xff\xd9"
+
+    def __init__(self, width: int = 1280, height: int = 720, fps: int = 15):
+        import subprocess
+        cmd = [
+            _LIBCAM_BIN,
+            "-t", "0",
+            "--codec", "mjpeg",
+            "--width",  str(width),
+            "--height", str(height),
+            "--framerate", str(fps),
+            "--nopreview",
+            "--flush",
+            "-o", "-",
+        ]
+        logger.info("Spawning: %s", " ".join(cmd))
+        self._proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+        time.sleep(1.5)            # give libcamera-vid time to initialise
+        self._buf:    bytes = b""
+        self._opened: bool  = self._proc.poll() is None
+        if not self._opened:
+            err = self._proc.stderr.read(500).decode(errors="replace")
+            logger.error("libcamera-vid failed to start: %s", err)
+
+    def isOpened(self) -> bool:
+        return self._opened and self._proc.poll() is None
+
+    def read(self):
+        """Return (ok, bgr_frame) like cv2.VideoCapture.read()."""
+        try:
+            while True:
+                chunk = self._proc.stdout.read(65536)
+                if not chunk:
+                    return False, None
+                self._buf += chunk
+
+                start = self._buf.find(self._SOI)
+                if start == -1:
+                    self._buf = b""
+                    continue
+
+                end = self._buf.find(self._EOI, start + 2)
+                if end == -1:
+                    continue          # need more data
+
+                jpeg       = self._buf[start : end + 2]
+                self._buf  = self._buf[end + 2 :]
+
+                arr   = np.frombuffer(jpeg, dtype=np.uint8)
+                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if frame is None:
+                    continue
+                return True, frame
+        except Exception as exc:
+            logger.debug("_LibcameraCapture.read() error: %s", exc)
+            return False, None
+
+    def release(self):
+        self._opened = False
+        try:
+            self._proc.terminate()
+            self._proc.wait(timeout=3)
+        except Exception:
+            pass
+
 # ── Firebase Admin SDK ────────────────────────────────────────────────────────
 try:
     import firebase_admin                                    # type: ignore
@@ -548,8 +634,9 @@ class FaceEngine:
         embs, emb_names, threshold = _load_embeddings()
 
         # Open camera
-        picam2 = None
-        cam    = None
+        picam2  = None
+        libcam  = None
+        cam     = None
         if _PICAM_OK:
             picam2 = Picamera2()
             config = picam2.create_preview_configuration(
@@ -558,7 +645,17 @@ class FaceEngine:
             picam2.configure(config)
             picam2.start()
             logger.info("Using PiCamera2")
-        else:
+        elif _LIBCAM_OK:
+            # RPi 5: libcamera Python bindings compiled for a different Python
+            # version → use libcamera-vid subprocess and parse MJPEG stream.
+            libcam = _LibcameraCapture(width=1280, height=720, fps=15)
+            if not libcam.isOpened():
+                logger.warning("libcamera-vid subprocess failed; falling back to V4L2")
+                libcam.release()
+                libcam = None
+            else:
+                logger.info("Using libcamera-vid subprocess (%s)", _LIBCAM_BIN)
+        if not picam2 and not libcam:
             # On Windows use DirectShow (CAP_DSHOW) for reliable webcam access;
             # on Linux/Pi fall back to CAP_V4L2 (or CAP_ANY when V4L2 absent).
             if sys.platform == "win32":
@@ -597,6 +694,8 @@ class FaceEngine:
                     rgb = picam2.capture_array()
                     frame = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                     ok = True
+                elif libcam:
+                    ok, frame = libcam.read()
                 else:
                     ok, frame = cam.read()
 
@@ -742,6 +841,8 @@ class FaceEngine:
         finally:
             if cam:
                 cam.release()
+            if libcam:
+                libcam.release()
             if picam2:
                 picam2.stop()
             logger.info("Detection session ended. Confirmed present: %s", list(present_set))
