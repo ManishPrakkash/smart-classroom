@@ -850,3 +850,22 @@ class FaceEngine:
 
 # ── Module-level singleton ────────────────────────────────────────────────────
 engine = FaceEngine()
+
+
+# ── Pre-warm ArcFace model in background so first scan has no download delay ──
+def _prewarm_arcface():
+    if not (_CV2_OK and _DF_OK):
+        return
+    weights = os.path.join(os.path.expanduser("~"), ".deepface", "weights", "arcface_weights.h5")
+    if os.path.exists(weights):
+        return   # already cached – nothing to do
+    try:
+        import numpy as _np
+        logger.info("Pre-warming ArcFace model (first-time download ~137 MB)…")
+        dummy = _np.zeros((100, 100, 3), dtype="uint8")
+        DeepFace.represent(dummy, model_name="ArcFace", enforce_detection=False)
+        logger.info("ArcFace model cached – future scans will start instantly")
+    except Exception as exc:
+        logger.warning("ArcFace pre-warm failed (will retry on first scan): %s", exc)
+
+threading.Thread(target=_prewarm_arcface, daemon=True, name="arcface-prewarm").start()
