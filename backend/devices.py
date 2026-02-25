@@ -1,5 +1,5 @@
 devices = {
-    "light1":  4,   # moved from 17 (17 is now Motor A IN2 on slider)
+    "light1": 14,   # GPIO14 (UART TX - free on RPi5 Bookworm); 17→slider IN2, 4→1-Wire busy
     "light2": 18,
     "light3": 27,
     "light4": 22,
