@@ -473,6 +473,40 @@ def camera_frame():
     )
 
 
+@app.route("/attendance/camera/stream", methods=["GET"])
+def camera_stream():
+    """MJPEG stream of annotated camera frames.
+
+    The browser keeps a single persistent HTTP connection open; the server
+    pushes each new JPEG as a multipart chunk.  This eliminates per-frame
+    TCP connection overhead and allows the browser to display frames at full
+    server output rate (~20-30 fps on a Pi 5) with no JavaScript polling.
+    """
+    if not _FACE_ENGINE_OK or face_engine is None:
+        return ("", 204)
+
+    def _generate():
+        last_jpeg = None
+        while True:
+            jpeg = face_engine.get_frame()
+            if jpeg is not None and jpeg is not last_jpeg:
+                last_jpeg = jpeg
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n"
+                    + jpeg
+                    + b"\r\n"
+                )
+            else:
+                time.sleep(0.025)   # ~40 fps cap; back off when no new frame
+
+    return Response(
+        _generate(),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.route("/schedules/<sched_id>/toggle", methods=["PATCH"])
 def toggle_schedule(sched_id):
     with schedules_lock:

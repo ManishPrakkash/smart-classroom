@@ -108,15 +108,15 @@ function getPillLabel(status, odType) {
 // Shows live annotated camera feed while scanning.
 // Attendance syncs automatically via Firestore onSnapshot in the parent.
 
-const POLL_MS = 2000 // poll every 2s while running
-const FRAME_POLL_MS = 400 // poll frames every 400ms for smooth preview
+const POLL_MS = 2000 // poll status every 2s while running
+const FRAME_POLL_MS = 250 // fallback frame poll (only used when MJPEG unavailable)
 
 function CameraPanel({ date, isAdmin }) {
-  const [status,   setStatus] = useState(null)
-  const [busy,     setBusy]   = useState(false)
-  const [error,    setError]  = useState(null)
-  const [frameUrl, setFrameUrl] = useState(null)
-  const [frameError, setFrameError] = useState(false)
+  const [status,      setStatus]      = useState(null)
+  const [busy,        setBusy]        = useState(false)
+  const [error,       setError]       = useState(null)
+  const [streamError, setStreamError] = useState(false)
+  const [frameUrl,    setFrameUrl]    = useState(null) // fallback only
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -137,23 +137,21 @@ function CameraPanel({ date, isAdmin }) {
     return () => clearInterval(t)
   }, [fetchStatus, status?.state])
 
-  // Frame polling (only when running)
+  // Fallback frame polling (only active when MJPEG stream errored)
   useEffect(() => {
-    if (status?.state !== 'running') {
+    if (status?.state !== 'running' || !streamError) {
       setFrameUrl(null)
-      setFrameError(false)
       return
     }
-
-    const updateFrame = () => {
-      // Add timestamp to prevent browser caching
-      setFrameUrl(`${API_BASE}/attendance/camera/frame?t=${Date.now()}`)
-      setFrameError(false)
-    }
-
+    const updateFrame = () => setFrameUrl(`${API_BASE}/attendance/camera/frame?t=${Date.now()}`)
     updateFrame()
     const interval = setInterval(updateFrame, FRAME_POLL_MS)
     return () => clearInterval(interval)
+  }, [status?.state, streamError])
+
+  // Reset stream error state when scan stops/restarts
+  useEffect(() => {
+    if (status?.state !== 'running') setStreamError(false)
   }, [status?.state])
 
   async function handleStart() {
@@ -185,6 +183,11 @@ function CameraPanel({ date, isAdmin }) {
   const running  = status?.state === 'running'
   const detected = status?.detected ?? []
 
+  // Prefer MJPEG stream; fall back to polled single frames on stream error
+  const streamSrc = running && !streamError
+    ? `${API_BASE}/attendance/camera/stream`
+    : null
+
   return (
     <div className={`cam-panel ${running ? 'cam-panel--running' : ''}`}>
       <div className="cam-panel__head">
@@ -209,21 +212,30 @@ function CameraPanel({ date, isAdmin }) {
       {/* Camera preview and scanning status */}
       {running && (
         <div className="cam-panel__body">
-          {frameUrl && !frameError ? (
+          {streamSrc ? (
             <div className="cam-panel__preview">
+              {/* MJPEG stream — browser renders at server push rate (~20-30 fps) */}
+              <img
+                key={streamSrc}
+                src={streamSrc}
+                alt="Camera feed"
+                className="cam-panel__video"
+                onError={() => setStreamError(true)}
+              />
+            </div>
+          ) : frameUrl ? (
+            <div className="cam-panel__preview">
+              {/* Polled fallback — single JPEG refreshed every 250 ms */}
               <img
                 src={frameUrl}
                 alt="Camera feed"
                 className="cam-panel__video"
-                onError={() => setFrameError(true)}
+                onError={() => {}}
               />
             </div>
           ) : (
             <div className="cam-panel__scanning">
-              {frameError
-                ? <span>⚠️ Preview unavailable</span>
-                : <span>Loading preview…</span>
-              }
+              <span>Loading preview…</span>
             </div>
           )}
           <div className="cam-panel__status">
