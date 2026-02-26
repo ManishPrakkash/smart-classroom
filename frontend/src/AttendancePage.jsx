@@ -637,14 +637,18 @@ export default function AttendancePage() {
           setSaveState('saving')
           try {
             const batch = writeBatch(db)
+            // Use merge:true on parent so we don't overwrite a doc the camera
+            // may have already created during an early scan.
             batch.set(doc(db, 'attendance', d), {
               date: d,
               classLabel: '24CS (Batch 2024)',
               createdAt: serverTimestamp(),
               markedAt: serverTimestamp(),
               markedBy: 'auto-init',
-            })
+            }, { merge: true })
             STUDENTS.forEach(s => {
+              // merge:true means existing fields (e.g. status:'present' from
+              // the camera) are preserved — only fill in missing fields.
               batch.set(doc(db, 'attendance', d, 'records', s.rollNo), {
                 rollNo: s.rollNo,
                 name: s.name,
@@ -652,7 +656,7 @@ export default function AttendancePage() {
                 odType: null,
                 source: 'manual',
                 updatedAt: serverTimestamp(),
-              })
+              }, { merge: true })
             })
             await batch.commit()
             setSaveState('saved')

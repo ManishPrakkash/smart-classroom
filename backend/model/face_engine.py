@@ -518,12 +518,15 @@ class FaceEngine:
         self.detect_every     = int(os.getenv("CAM_DETECT_EVERY", 10))   # was 6
         self.detection_scale  = float(os.getenv("CAM_SCALE", 0.5))
         self.model_name       = os.getenv("CAM_MODEL", "ArcFace")
-        self.detector_backend = os.getenv("CAM_DETECTOR", "opencv")
-        self.fallback_backend = os.getenv("CAM_FALLBACK", "retinaface")
-        self.jpeg_quality     = int(os.getenv("CAM_JPEG_QUALITY", 55))   # was 70
+        # retinaface is a CNN detector that finds ALL faces in a frame reliably.
+        # opencv (Haar cascade) is fast but only finds one face at a time.
+        self.detector_backend = os.getenv("CAM_DETECTOR", "retinaface")
+        self.fallback_backend = os.getenv("CAM_FALLBACK", "mtcnn")
+        self.jpeg_quality     = int(os.getenv("CAM_JPEG_QUALITY", 55))
         self.preview_every    = int(os.getenv("CAM_PREVIEW_EVERY", 5))   # heartbeat frames
         self.preview_fps      = float(os.getenv("CAM_PREVIEW_FPS", 15))
-        self.detect_interval_s = float(os.getenv("CAM_DETECT_INTERVAL_S", 0.30))
+        # retinaface is slower than opencv; 0.5s gives the Pi enough time per pass
+        self.detect_interval_s = float(os.getenv("CAM_DETECT_INTERVAL_S", 0.50))
         self.cam_width        = int(os.getenv("CAM_WIDTH", 640))
         self.cam_height       = int(os.getenv("CAM_HEIGHT", 480))
         self.cam_fps          = int(os.getenv("CAM_FPS", 30))
@@ -833,7 +836,8 @@ class FaceEngine:
                             enforce_detection=False,
                             align=False,
                         )
-                    except Exception:
+                    except Exception as _rep_exc:
+                        logger.warning("[Recog] DeepFace.represent error: %s", _rep_exc)
                         reps = []
 
                     if reps:
@@ -855,14 +859,15 @@ class FaceEngine:
                             second_dist = sorted_c[1][1] if len(sorted_c) > 1 else 1.0
                             margin = second_dist - best_dist
                             adaptive_thresh = threshold
-                            if best_dist < 0.52 and margin >= 0.08:
+                            # Widen threshold to 0.52 whenever the match is reasonably
+                            # confident (margin >= 0.02 already filters weak matches below).
+                            if best_dist < 0.52 and margin >= 0.02:
                                 adaptive_thresh = 0.52
                             logger.info(
-                                "[Recog] best=%s dist=%.3f thresh=%.2f margin=%.3f",
+                                "[Recog] best=%s dist=%.3f thresh=%.2f margin=%.3f → %s",
                                 best_name, best_dist, adaptive_thresh, margin,
+                                "ACCEPT" if (best_dist < adaptive_thresh and margin >= 0.02) else "REJECT",
                             )
-                            # Lowered margin requirement 0.04 → 0.02
-                            # (small datasets produce tightly-packed embeddings)
                             if best_dist < adaptive_thresh and margin >= 0.02:
                                 detected_name = best_name
                                 roll = _detected_name_to_roll(detected_name)
@@ -897,7 +902,7 @@ class FaceEngine:
                     try:
                         detections = detect_future.result()
                     except Exception as exc:
-                        logger.debug("Detection task error: %s", exc)
+                        logger.warning("Detection task raised: %s", exc)
                         detections = []
                     detect_future = None
 
@@ -909,8 +914,9 @@ class FaceEngine:
                         detected_name = det.get("detected_name") or "Unknown"
                         votes[roll] = votes.get(roll, 0) + 1
                         logger.info(
-                            "[Vote] %d/%d for %s (%s)",
+                            "[Vote] %d/%d for %s (%s) | present_set=%s",
                             votes[roll], self.vote_required, detected_name, roll,
+                            list(present_set),
                         )
 
                         if votes[roll] >= self.vote_required:
