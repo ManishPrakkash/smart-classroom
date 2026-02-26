@@ -79,6 +79,10 @@ class _LibcameraCapture:
 
     def __init__(self, width: int = 640, height: int = 480, fps: int = 30):
         import subprocess
+        contrast = os.getenv("CAM_CONTRAST", "1.06")
+        saturation = os.getenv("CAM_SATURATION", "1.08")
+        sharpness = os.getenv("CAM_SHARPNESS", "1.08")
+        brightness = os.getenv("CAM_BRIGHTNESS", "0.00")
         cmd = [
             _LIBCAM_BIN,
             "-t", "0",
@@ -86,6 +90,12 @@ class _LibcameraCapture:
             "--width",  str(width),
             "--height", str(height),
             "--framerate", str(fps),
+            "--awb", "auto",
+            "--contrast", contrast,
+            "--saturation", saturation,
+            "--sharpness", sharpness,
+            "--brightness", brightness,
+            "--denoise", "cdn_fast",
             "--nopreview",
             "--flush",
             "-o", "-",
@@ -491,6 +501,7 @@ class FaceEngine:
         self._error: Optional[str]       = None
         self._frame_count    = 0
         self._fps            = 0.0
+        self._encode_t       = time.time()  # timestamp of last JPEG encode
 
         # Live frame buffer (JPEG bytes of the latest annotated frame)
         self._frame_lock   = threading.Lock()
@@ -511,6 +522,15 @@ class FaceEngine:
         self.fallback_backend = os.getenv("CAM_FALLBACK", "retinaface")
         self.jpeg_quality     = int(os.getenv("CAM_JPEG_QUALITY", 55))   # was 70
         self.preview_every    = int(os.getenv("CAM_PREVIEW_EVERY", 5))   # heartbeat frames
+        self.preview_fps      = float(os.getenv("CAM_PREVIEW_FPS", 15))
+        self.detect_interval_s = float(os.getenv("CAM_DETECT_INTERVAL_S", 0.30))
+        self.cam_width        = int(os.getenv("CAM_WIDTH", 640))
+        self.cam_height       = int(os.getenv("CAM_HEIGHT", 480))
+        self.cam_fps          = int(os.getenv("CAM_FPS", 30))
+        self.cam_contrast     = float(os.getenv("CAM_CONTRAST", 1.06))
+        self.cam_saturation   = float(os.getenv("CAM_SATURATION", 1.08))
+        self.cam_sharpness    = float(os.getenv("CAM_SHARPNESS", 1.08))
+        self.cam_brightness   = float(os.getenv("CAM_BRIGHTNESS", 0.00))
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -616,7 +636,7 @@ class FaceEngine:
                 cv2.putText(annotated, "\u2713 PRESENT", (x1 + 3, y2 - 6),
                             font, 0.45, (0, 220, 80), 1, cv2.LINE_AA)
 
-        # FPS watermark
+        # FPS watermark — uses the encode-rate FPS (updated below)
         with self._lock:
             fps = self._fps
         cv2.putText(annotated, f"{fps:.1f} fps", (8, h - 10),
@@ -627,6 +647,12 @@ class FaceEngine:
         if ret:
             with self._frame_lock:
                 self._latest_jpeg = bytes(buf)
+            # Measure FPS at encode time (true preview output rate, capped at 60)
+            now = time.time()
+            dt  = max(now - self._encode_t, 1e-6)
+            instant_fps = min(1.0 / dt, 60.0)
+            self._fps   = self._fps * 0.85 + instant_fps * 0.15
+            self._encode_t = now
 
     # ── Capture thread ────────────────────────────────────────────────────────
 
@@ -638,9 +664,9 @@ class FaceEngine:
         while not self._stop_event.is_set():
             try:
                 if picam2:
-                    rgb   = picam2.capture_array()
+                    rgb = picam2.capture_array("main")
                     frame = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-                    ok    = True
+                    ok = True
                 elif libcam:
                     ok, frame = libcam.read()
                 else:
@@ -655,61 +681,71 @@ class FaceEngine:
                 logger.debug("Capture thread error: %s", exc)
                 time.sleep(0.01)
 
-    # ── Internal detection loop ───────────────────────────────────────────────
-
     def _run_loop(self):
         try:
             self._detect_loop()
         except Exception as exc:
             logger.exception("Face detection loop crashed: %s", exc)
             with self._lock:
-                self._error   = str(exc)
-                self._state   = _State.IDLE
+                self._error = str(exc)
+                self._state = _State.IDLE
                 self._stopped_at = datetime.now().isoformat(timespec="seconds")
         else:
             with self._lock:
-                self._state      = _State.IDLE
+                self._state = _State.IDLE
                 self._stopped_at = datetime.now().isoformat(timespec="seconds")
 
     def _detect_loop(self):
-        # Load embeddings fresh for this session
         embs, emb_names, threshold = _load_embeddings()
 
-        # ── Open camera ───────────────────────────────────────────────────────
-        picam2  = None
-        libcam  = None
-        cam     = None
+        picam2 = None
+        libcam = None
+        cam = None
         if _PICAM_OK:
             picam2 = Picamera2()
-            # Use a lores stream at half-res for detection + full display stream
-            # If lores is unavailable just use 640×480 on the main stream.
             try:
                 config = picam2.create_preview_configuration(
-                    main={"size": (640, 480), "format": "RGB888"},
-                    lores={"size": (320, 240), "format": "YUV420"},
+                    main={"size": (self.cam_width, self.cam_height), "format": "RGB888"},
+                    lores={
+                        "size": (max(160, self.cam_width // 2), max(120, self.cam_height // 2)),
+                        "format": "YUV420",
+                    },
+                    queue=False,
+                    buffer_count=2,
                 )
-                self._picam_has_lores = True
             except Exception:
                 config = picam2.create_preview_configuration(
-                    main={"size": (640, 480), "format": "RGB888"}
+                    main={"size": (self.cam_width, self.cam_height), "format": "RGB888"},
+                    queue=False,
+                    buffer_count=2,
                 )
-                self._picam_has_lores = False
             picam2.configure(config)
             picam2.start()
-            logger.info("Using PiCamera2 @ 640x480")
+            try:
+                picam2.set_controls({
+                    "AeEnable": True,
+                    "AwbEnable": True,
+                    "Contrast": self.cam_contrast,
+                    "Saturation": self.cam_saturation,
+                    "Sharpness": self.cam_sharpness,
+                    "Brightness": self.cam_brightness,
+                })
+            except Exception as exc:
+                logger.debug("Picamera2 controls not fully applied: %s", exc)
+            logger.info("Using PiCamera2 @ %dx%d/%dfps", self.cam_width, self.cam_height, self.cam_fps)
         elif _LIBCAM_OK:
-            # RPi 5: libcamera Python bindings compiled for a different Python
-            # version → use libcamera-vid subprocess and parse MJPEG stream.
-            libcam = _LibcameraCapture(width=640, height=480, fps=30)
+            libcam = _LibcameraCapture(width=self.cam_width, height=self.cam_height, fps=self.cam_fps)
             if not libcam.isOpened():
                 logger.warning("libcamera-vid subprocess failed; falling back to V4L2")
                 libcam.release()
                 libcam = None
             else:
-                logger.info("Using libcamera-vid subprocess (%s) @ 640x480/30fps", _LIBCAM_BIN)
+                logger.info(
+                    "Using libcamera-vid subprocess (%s) @ %dx%d/%dfps",
+                    _LIBCAM_BIN, self.cam_width, self.cam_height, self.cam_fps,
+                )
+
         if not picam2 and not libcam:
-            # On Windows use DirectShow (CAP_DSHOW) for reliable webcam access;
-            # on Linux/Pi fall back to CAP_V4L2 (or CAP_ANY when V4L2 absent).
             if sys.platform == "win32":
                 backend = cv2.CAP_DSHOW
                 backend_name = "DirectShow"
@@ -721,15 +757,17 @@ class FaceEngine:
                 backend_name = "CAP_ANY"
             cam = cv2.VideoCapture(0, backend)
             if not cam.isOpened():
-                cam = cv2.VideoCapture(0)   # fallback: no backend hint
+                cam = cv2.VideoCapture(0)
                 backend_name += "(fallback)"
-            cam.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            cam.set(cv2.CAP_PROP_FPS,          30)
-            cam.set(cv2.CAP_PROP_BUFFERSIZE,   1)   # keep buffer minimal → low latency
-            logger.info("Using OpenCV VideoCapture(0) via %s @ 640x480/30fps", backend_name)
+            cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.cam_width)
+            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cam_height)
+            cam.set(cv2.CAP_PROP_FPS, self.cam_fps)
+            cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            logger.info(
+                "Using OpenCV VideoCapture(0) via %s @ %dx%d/%dfps",
+                backend_name, self.cam_width, self.cam_height, self.cam_fps,
+            )
 
-        # ── Start dedicated capture thread ────────────────────────────────────
         self._raw_frame = None
         cap_thread = threading.Thread(
             target=self._capture_thread_fn,
@@ -739,31 +777,25 @@ class FaceEngine:
         )
         cap_thread.start()
 
-        # Wait for the first frame
-        for _ in range(100):   # up to ~1 second
+        for _ in range(100):
             with self._raw_lock:
                 if self._raw_frame is not None:
                     break
             time.sleep(0.01)
 
-        votes:        dict[str, int] = {}
-        present_set:  set[str]       = set()   # confirmed rollNos this session
-        frame_idx     = 0
-        preview_idx   = 0    # counts frames that reach the preview encoder
-        fps_est       = 0.0
-        cap_t         = time.time()
-        deadline      = time.time() + self.max_duration_s
-
-        # Detection is heavy — offload to a single-worker thread pool so the
-        # capture + preview loop is never blocked by DeepFace.
+        votes: dict[str, int] = {}
+        present_set: set[str] = set()
+        frame_idx = 0
+        next_preview_at = time.time()
+        next_detect_at = time.time()
+        deadline = time.time() + self.max_duration_s
         detect_future: Optional[Future] = None
-        detect_frame:  Optional[object] = None   # frame being analysed
 
         with self._lock:
             date = self._session_date
+        roll_to_name = {s["rollNo"]: s["name"] for s in _STUDENTS}
 
-        def _run_detection(small_frame, orig_frame):
-            """Runs in the ThreadPoolExecutor. Returns (faces, orig_frame)."""
+        def _run_detection(small_frame, scale):
             try:
                 faces = DeepFace.extract_faces(
                     img_path=small_frame,
@@ -781,13 +813,68 @@ class FaceEngine:
                     )
                 except Exception:
                     faces = []
-            return faces, orig_frame
+
+            out = []
+            for face_obj in faces:
+                fa = face_obj.get("facial_area") or {}
+                if not fa:
+                    continue
+
+                detected_name = "Unknown"
+                roll = None
+                face = face_obj.get("face")
+
+                if (face is not None) and embs is not None and embs.size > 0 and emb_names:
+                    try:
+                        reps = DeepFace.represent(
+                            img_path=face,
+                            model_name=self.model_name,
+                            detector_backend="skip",
+                            enforce_detection=False,
+                            align=False,
+                        )
+                    except Exception:
+                        reps = []
+
+                    if reps:
+                        vec = np.asarray(reps[0].get("embedding"), dtype=np.float32)
+                        norm = np.linalg.norm(vec)
+                        if norm:
+                            vec = vec / norm
+
+                        distances = 1.0 - np.dot(embs, vec)
+                        best_per_n: dict[str, float] = {}
+                        for i, dist in enumerate(distances):
+                            person = emb_names[i]
+                            if person not in best_per_n or dist < best_per_n[person]:
+                                best_per_n[person] = float(dist)
+
+                        sorted_c = sorted(best_per_n.items(), key=lambda x: x[1])
+                        if sorted_c:
+                            best_name, best_dist = sorted_c[0]
+                            second_dist = sorted_c[1][1] if len(sorted_c) > 1 else 1.0
+                            adaptive_thresh = threshold
+                            if best_dist < 0.52 and (second_dist - best_dist) >= 0.12:
+                                adaptive_thresh = 0.52
+                            if best_dist < adaptive_thresh and (second_dist - best_dist) >= 0.04:
+                                detected_name = best_name
+                                roll = _detected_name_to_roll(detected_name)
+
+                out.append({
+                    "x": int(fa.get("x", 0) * scale),
+                    "y": int(fa.get("y", 0) * scale),
+                    "w": int(fa.get("w", 50) * scale),
+                    "h": int(fa.get("h", 50) * scale),
+                    "detected_name": detected_name,
+                    "roll": roll,
+                })
+
+            return out
 
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="deepface")
 
         try:
             while not self._stop_event.is_set() and time.time() < deadline:
-                # ── Grab latest raw frame from capture thread ─────────────────
                 with self._raw_lock:
                     frame = self._raw_frame
 
@@ -796,141 +883,84 @@ class FaceEngine:
                     continue
 
                 frame_idx += 1
-                now   = time.time()
-                dt    = max(now - cap_t, 1e-6)
-                fps_est = fps_est * 0.9 + (1.0 / dt) * 0.1
-                cap_t   = now
-
                 with self._lock:
                     self._frame_count = frame_idx
-                    self._fps         = fps_est
 
-                # ── Check if the async detection task finished ────────────────
                 if detect_future is not None and detect_future.done():
                     try:
-                        faces, _df = detect_future.result()
+                        detections = detect_future.result()
                     except Exception as exc:
                         logger.debug("Detection task error: %s", exc)
-                        faces = []
+                        detections = []
                     detect_future = None
 
-                    # Update bounding boxes
-                    scale = 1.0 / self.detection_scale if self.detection_scale != 1.0 else 1.0
-                    with self._frame_lock:
-                        self._face_boxes = []
-                        for fo in faces:
-                            fa = fo.get("facial_area") or {}
-                            if fa:
-                                self._face_boxes.append({
-                                    "x": int(fa.get("x", 0) * scale),
-                                    "y": int(fa.get("y", 0) * scale),
-                                    "w": int(fa.get("w", 50) * scale),
-                                    "h": int(fa.get("h", 50) * scale),
-                                    "label": "...",
-                                    "confirmed": False,
-                                })
-
-                    # Identify each detected face (still on this thread — fast)
-                    for face_obj in faces:
-                        face          = face_obj.get("face")
-                        detected_name = "Unknown"
-
-                        if embs is not None and embs.size > 0 and emb_names:
-                            try:
-                                reps = DeepFace.represent(
-                                    img_path=face,
-                                    model_name=self.model_name,
-                                    detector_backend="skip",
-                                    enforce_detection=False,
-                                    align=False,
-                                )
-                            except Exception:
-                                reps = []
-
-                            if reps:
-                                vec  = np.asarray(reps[0].get("embedding"), dtype=np.float32)
-                                norm = np.linalg.norm(vec)
-                                if norm:
-                                    vec = vec / norm
-
-                                distances  = 1.0 - np.dot(embs, vec)
-                                best_per_n: dict[str, float] = {}
-                                for i, dist in enumerate(distances):
-                                    person = emb_names[i]
-                                    if person not in best_per_n or dist < best_per_n[person]:
-                                        best_per_n[person] = float(dist)
-
-                                sorted_c = sorted(best_per_n.items(), key=lambda x: x[1])
-                                if sorted_c:
-                                    best_name, best_dist = sorted_c[0]
-                                    second_dist = sorted_c[1][1] if len(sorted_c) > 1 else 1.0
-                                    adaptive_thresh = threshold
-                                    if best_dist < 0.52 and (second_dist - best_dist) >= 0.12:
-                                        adaptive_thresh = 0.52
-                                    if best_dist < adaptive_thresh and (second_dist - best_dist) >= 0.04:
-                                        detected_name = best_name
-
-                        if detected_name == "Unknown":
+                    for det in detections:
+                        roll = det.get("roll")
+                        if not roll or roll in present_set:
                             continue
 
-                        roll = _detected_name_to_roll(detected_name)
-                        if roll is None:
-                            logger.debug("No rollNo mapping for detected name: %s", detected_name)
-                            continue
-
-                        if roll in present_set:
-                            continue  # already confirmed
-
+                        detected_name = det.get("detected_name") or "Unknown"
                         votes[roll] = votes.get(roll, 0) + 1
-                        logger.debug("Vote %d/%d for %s (%s)",
-                                     votes[roll], self.vote_required, detected_name, roll)
+                        logger.debug(
+                            "Vote %d/%d for %s (%s)",
+                            votes[roll], self.vote_required, detected_name, roll,
+                        )
 
                         if votes[roll] >= self.vote_required:
                             present_set.add(roll)
-                            s_name = next(
-                                (s["name"] for s in _STUDENTS if s["rollNo"] == roll),
-                                detected_name
-                            )
+                            s_name = roll_to_name.get(roll, detected_name)
                             _mark_present_firebase(date, roll, s_name)
                             with self._lock:
                                 if roll not in self._detected_so_far:
                                     self._detected_so_far.append(roll)
                                 self._last_seen[roll] = s_name
-                            with self._frame_lock:
-                                for box in self._face_boxes:
-                                    if box.get("label") in (detected_name, "...", "Unknown"):
-                                        box["label"]     = s_name
-                                        box["confirmed"] = True
-                                        break
 
-                    # Always annotate right after a detection pass finishes
+                    boxes = []
+                    for det in detections:
+                        roll = det.get("roll")
+                        detected_name = det.get("detected_name") or "Unknown"
+                        confirmed = bool(roll and roll in present_set)
+                        label = "Unknown"
+                        if roll:
+                            label = roll_to_name.get(roll, detected_name)
+                        elif detected_name != "Unknown":
+                            label = detected_name
+                        boxes.append({
+                            "x": det["x"],
+                            "y": det["y"],
+                            "w": det["w"],
+                            "h": det["h"],
+                            "label": label,
+                            "confirmed": confirmed,
+                        })
+                    with self._frame_lock:
+                        self._face_boxes = boxes
+
                     self._store_annotated_frame(frame)
-                    preview_idx = 0   # reset heartbeat counter
+                    next_preview_at = time.time()
 
-                # ── Submit a new detection task if idle and it's time ─────────
-                if detect_future is None and (frame_idx % self.detect_every == 0):
+                now = time.time()
+                if detect_future is None and now >= next_detect_at:
+                    scale = 1.0 / self.detection_scale if self.detection_scale != 1.0 else 1.0
                     if self.detection_scale != 1.0:
-                        small = cv2.resize(frame, (0, 0),
-                                           fx=self.detection_scale,
-                                           fy=self.detection_scale,
-                                           interpolation=cv2.INTER_LINEAR)
+                        small = cv2.resize(
+                            frame, (0, 0),
+                            fx=self.detection_scale,
+                            fy=self.detection_scale,
+                            interpolation=cv2.INTER_LINEAR,
+                        )
                     else:
                         small = frame
-                    detect_future = executor.submit(_run_detection, small, frame)
+                    detect_future = executor.submit(_run_detection, small, scale)
+                    next_detect_at = now + max(0.10, self.detect_interval_s)
+                elif now >= next_preview_at:
+                    self._store_annotated_frame(frame)
+                    next_preview_at = now + (1.0 / max(self.preview_fps, 1.0))
 
-                # ── Heartbeat: encode a preview frame every N frames so the
-                #    live feed stays smooth even between detection passes ────────
-                else:
-                    preview_idx += 1
-                    if preview_idx >= self.preview_every:
-                        self._store_annotated_frame(frame)
-                        preview_idx = 0
-
-                # Yield CPU briefly — the capture thread runs independently
                 time.sleep(0.001)
 
         finally:
-            self._stop_event.set()   # also stops capture thread
+            self._stop_event.set()
             executor.shutdown(wait=False)
             cap_thread.join(timeout=3)
             if cam:
@@ -940,9 +970,6 @@ class FaceEngine:
             if picam2:
                 picam2.stop()
             logger.info("Detection session ended. Confirmed present: %s", list(present_set))
-
-
-# ── Module-level singleton ────────────────────────────────────────────────────
 engine = FaceEngine()
 
 

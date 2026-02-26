@@ -117,6 +117,27 @@ function CameraPanel({ date, isAdmin }) {
   const [error,       setError]       = useState(null)
   const [streamError, setStreamError] = useState(false)
   const [frameUrl,    setFrameUrl]    = useState(null) // fallback only
+  const [displayFps,  setDisplayFps]  = useState(0)   // client-side measured FPS
+
+  // Client-side FPS counter — counts onLoad events from the MJPEG img
+  const fpsFrames  = useRef(0)
+  const fpsTimer   = useRef(null)
+
+  const startFpsCounter = useCallback(() => {
+    if (fpsTimer.current) return
+    fpsTimer.current = setInterval(() => {
+      setDisplayFps(Math.min(fpsFrames.current, 60))
+      fpsFrames.current = 0
+    }, 1000)
+  }, [])
+
+  const stopFpsCounter = useCallback(() => {
+    if (fpsTimer.current) { clearInterval(fpsTimer.current); fpsTimer.current = null }
+    setDisplayFps(0)
+    fpsFrames.current = 0
+  }, [])
+
+  const onStreamLoad = useCallback(() => { fpsFrames.current += 1 }, [])
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -151,8 +172,16 @@ function CameraPanel({ date, isAdmin }) {
 
   // Reset stream error state when scan stops/restarts
   useEffect(() => {
-    if (status?.state !== 'running') setStreamError(false)
-  }, [status?.state])
+    if (status?.state !== 'running') {
+      setStreamError(false)
+      stopFpsCounter()
+    } else {
+      startFpsCounter()
+    }
+  }, [status?.state, startFpsCounter, stopFpsCounter])
+
+  // Cleanup FPS counter on unmount
+  useEffect(() => () => stopFpsCounter(), [stopFpsCounter])
 
   async function handleStart() {
     setBusy(true)
@@ -195,8 +224,8 @@ function CameraPanel({ date, isAdmin }) {
         <span className="cam-panel__title">
           {running ? 'Scanning…' : 'Attendance Scan'}
         </span>
-        {running && status?.fps > 0 && (
-          <span className="cam-panel__fps">{status.fps} fps</span>
+        {running && displayFps > 0 && (
+          <span className="cam-panel__fps">{displayFps} fps</span>
         )}
         <span className="cam-panel__spacer" />
         {error && <span className="cam-panel__err">{error}</span>}
@@ -220,6 +249,7 @@ function CameraPanel({ date, isAdmin }) {
                 src={streamSrc}
                 alt="Camera feed"
                 className="cam-panel__video"
+                onLoad={onStreamLoad}
                 onError={() => setStreamError(true)}
               />
             </div>
