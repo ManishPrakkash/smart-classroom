@@ -1,4 +1,7 @@
 {
-  "_comment": "Add entries here ONLY for pkl names that auto-mapping cannot resolve (ambiguous first names, etc).",
-  "_format": "{ \"<pkl_label_exact_lowercase>\": \"<rollNo>\" }"
+  "_comment": "Manual overrides for pkl labels that auto-mapping cannot resolve. Key = exact pkl folder name (lowercase). Value = rollNo.",
+  "_format": "{ \"<pkl_label_exact_lowercase>\": \"<rollNo>\" }",
+
+  "kavinkumar c":        "24CS110",
+  "manish prakkash ms":  "24CS130"
 }

@@ -514,7 +514,7 @@ class FaceEngine:
 
         # Config
         self.max_duration_s   = int(os.getenv("CAM_MAX_DURATION", 600))   # 10 min default
-        self.vote_required    = int(os.getenv("CAM_VOTES", 3))
+        self.vote_required    = int(os.getenv("CAM_VOTES", 2))
         self.detect_every     = int(os.getenv("CAM_DETECT_EVERY", 10))   # was 6
         self.detection_scale  = float(os.getenv("CAM_SCALE", 0.5))
         self.model_name       = os.getenv("CAM_MODEL", "ArcFace")
@@ -853,10 +853,17 @@ class FaceEngine:
                         if sorted_c:
                             best_name, best_dist = sorted_c[0]
                             second_dist = sorted_c[1][1] if len(sorted_c) > 1 else 1.0
+                            margin = second_dist - best_dist
                             adaptive_thresh = threshold
-                            if best_dist < 0.52 and (second_dist - best_dist) >= 0.12:
+                            if best_dist < 0.52 and margin >= 0.08:
                                 adaptive_thresh = 0.52
-                            if best_dist < adaptive_thresh and (second_dist - best_dist) >= 0.04:
+                            logger.info(
+                                "[Recog] best=%s dist=%.3f thresh=%.2f margin=%.3f",
+                                best_name, best_dist, adaptive_thresh, margin,
+                            )
+                            # Lowered margin requirement 0.04 → 0.02
+                            # (small datasets produce tightly-packed embeddings)
+                            if best_dist < adaptive_thresh and margin >= 0.02:
                                 detected_name = best_name
                                 roll = _detected_name_to_roll(detected_name)
 
@@ -901,8 +908,8 @@ class FaceEngine:
 
                         detected_name = det.get("detected_name") or "Unknown"
                         votes[roll] = votes.get(roll, 0) + 1
-                        logger.debug(
-                            "Vote %d/%d for %s (%s)",
+                        logger.info(
+                            "[Vote] %d/%d for %s (%s)",
                             votes[roll], self.vote_required, detected_name, roll,
                         )
 
