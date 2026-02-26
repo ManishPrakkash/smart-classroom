@@ -50,5 +50,32 @@
       6
     ],
     "enabled": true
+  },
+  {
+    "id": "95782ca1-b123-4b2c-9b5c-2d6bb66e3034",
+    "label": "test",
+    "devices": [
+      "light1",
+      "light2",
+      "light3",
+      "light4",
+      "fan1",
+      "fan2",
+      "fan3",
+      "fan4"
+    ],
+    "on_time": "16:17",
+    "off_time": "16:18",
+    "days": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "enabled": true,
+    "attendance": false
   }
 ]

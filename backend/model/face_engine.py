@@ -170,7 +170,9 @@ _BACKEND = os.path.dirname(_HERE)
 
 EMBEDDINGS_FILE = os.path.join(_HERE, "deepface_embeddings.pkl")
 NAME_MAPPING_FILE = os.path.join(_HERE, "name_mapping.json")
-SERVICE_ACCOUNT  = os.path.join(_BACKEND, "smart-class-da901-firebase-adminsdk-fbsvc-3b7bc6538d.json")
+DEFAULT_SERVICE_ACCOUNT = os.path.join(
+    _BACKEND, "smart-class-da901-firebase-adminsdk-fbsvc-3b7bc6538d.json"
+)
 
 # ── Name mapping ──────────────────────────────────────────────────────────────────
 #
@@ -300,24 +302,53 @@ _load_override_mapping()
 
 # ── Firebase init (once, shared with app.py if already initialised) ───────────
 _db = None
+_firebase_error: Optional[str] = None
+
+
+def _resolve_service_account_path() -> Optional[str]:
+    """Resolve Firebase service-account path from env or default location."""
+    env_path = (os.getenv("FIREBASE_SERVICE_ACCOUNT") or "").strip()
+    if env_path:
+        candidate = env_path if os.path.isabs(env_path) else os.path.join(_BACKEND, env_path)
+        return candidate
+
+    gac_path = (os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "").strip()
+    if gac_path:
+        return gac_path
+
+    return DEFAULT_SERVICE_ACCOUNT
 
 def _init_firebase():
-    global _db
+    global _db, _firebase_error
     if not _FB_OK:
+        _firebase_error = "firebase-admin not installed"
         return
-    if not os.path.exists(SERVICE_ACCOUNT):
-        logger.warning("Service account JSON not found at %s", SERVICE_ACCOUNT)
-        return
+
+    cred_path = _resolve_service_account_path()
+
     try:
         # Reuse existing app if already initialised by app.py
         try:
             app = firebase_admin.get_app("face-engine")
         except ValueError:
-            cred = credentials.Certificate(SERVICE_ACCOUNT)
-            app  = firebase_admin.initialize_app(cred, name="face-engine")
+            if cred_path and os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                app = firebase_admin.initialize_app(cred, name="face-engine")
+            else:
+                # Fallback: let firebase-admin pick Application Default Credentials.
+                app = firebase_admin.initialize_app(name="face-engine")
+
         _db = firestore.client(app=app)
+        _firebase_error = None
         logger.info("Firestore client initialised (face-engine)")
     except Exception as exc:
+        _firebase_error = str(exc)
+        if cred_path and not os.path.exists(cred_path):
+            logger.warning(
+                "Firebase service account JSON not found at %s. "
+                "Set FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS.",
+                cred_path,
+            )
         logger.error("Firebase init error: %s", exc)
 
 _init_firebase()
@@ -593,6 +624,7 @@ class FaceEngine:
                 "error":         self._error,
                 "embeddings_ok": os.path.exists(EMBEDDINGS_FILE),
                 "firebase_ok":   _db is not None,
+                "firebase_error": _firebase_error,
             }
 
     # ── Frame annotation ──────────────────────────────────────────────────────
