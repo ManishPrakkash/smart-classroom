@@ -195,10 +195,12 @@ def setup_pin_factory():
         raise
 
 def create_relays():
-    return {
-        name: OutputDevice(pin, active_high=False)
-        for name, pin in devices.items()
-    }
+    relay_map = {}
+    for name, pin in devices.items():
+        r = OutputDevice(pin, active_high=False, initial_value=False)
+        r.off()   # drive pin HIGH → relay de-energised (belt-and-suspenders for active-low boards)
+        relay_map[name] = r
+    return relay_map
 
 setup_pin_factory()
 relays = create_relays()
