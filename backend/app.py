@@ -42,7 +42,20 @@ except Exception as _fe_err:
 # ── App setup ────────────────────────────────────────────
 
 app = Flask("SmartSwitch")
-CORS(app)
+CORS(app,
+     origins=[
+         "http://localhost",
+         "http://localhost:5173",    # Vite dev server
+         "http://localhost:8100",    # Ionic dev server
+         "capacitor://localhost",    # Capacitor Android
+         "ionic://localhost",        # Ionic native
+         "null",                     # Some Android WebView contexts
+     ],
+     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization", "Accept"],
+     supports_credentials=True)
+
+
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),

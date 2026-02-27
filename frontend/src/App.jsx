@@ -206,6 +206,7 @@ function HomePage({ devices, states, setStates, connected, setConnected, loading
       <span className="splash__icon">⚠️</span>
       <p className="splash__msg">Can't reach the server</p>
       <p className="splash__sub">{API_BASE}</p>
+      <p className="splash__sub">{error}</p>
       <button className="btn-primary" onClick={onRetry}>Retry</button>
     </div>
   )
@@ -288,7 +289,8 @@ function AuthenticatedApp() {
       setStates(Object.fromEntries(list.map(d => [d, false])))
       setConnected(true)
     } catch (e) {
-      setError(e.message)
+      const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+      setError(message)
       setConnected(false)
     } finally {
       setLoading(false)
