@@ -211,7 +211,6 @@ function CameraPanel({ date, isAdmin }) {
 
   const running  = status?.state === 'running'
   const detected = status?.detected ?? []
-  const firebaseWriteBlocked = status?.firebase_ok === false
 
   // Prefer MJPEG stream; fall back to polled single frames on stream error
   const streamSrc = running && !streamError
@@ -230,11 +229,6 @@ function CameraPanel({ date, isAdmin }) {
         )}
         <span className="cam-panel__spacer" />
         {error && <span className="cam-panel__err">{error}</span>}
-        {firebaseWriteBlocked && !error && (
-          <span className="cam-panel__err" title={status?.firebase_error || 'Firebase unavailable'}>
-            Attendance write disabled (Firebase)
-          </span>
-        )}
         {isAdmin && (
           running
             ? <button className="cam-btn cam-btn--stop"  onClick={handleStop}  disabled={busy}>■ Stop</button>
